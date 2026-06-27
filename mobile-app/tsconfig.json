@@ -8,7 +8,7 @@
     "jsx": "react-native",
     "noEmit": true,
     "strict": true,
-    "ignoreDeprecations": "6.0",
+    "ignoreDeprecations": "5.0",
     "moduleResolution": "node",
     "baseUrl": "./",
     "paths": {
