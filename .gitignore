@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+jspm_packages/
+web_modules/
+.npm/
+.eslintcache
+
+# Build outputs
+dist/
+build/
+bin/
+obj/
+out/
+*.gemini
+
+# Python virtual environment & cache
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+firebaseServiceAccount.json
+
+# React Native specific
+ios/Pods/
+ios/build/
+android/app/build/
+android/.gradle/
+android/build/
+.expo/
+*.ipa
+*.apk
+*.aar
+*.app
+
+# OS files
+.DS_Store
+Thumbs.db

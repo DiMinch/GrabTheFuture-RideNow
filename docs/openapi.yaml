@@ -1,0 +1,283 @@
+openapi: 3.0.3
+info:
+  title: RideNow API Specification
+  description: API contract for RideNow - Accessibility-focused smart mobility solution for visually impaired passengers.
+  version: 1.0.0
+servers:
+  - url: http://localhost:5000/api
+    description: Local Backend Server
+  - url: http://localhost:8000/api
+    description: Local AI Gateway Server
+paths:
+  /auth/verify:
+    post:
+      summary: Verify Firebase ID Token
+      description: Validates the ID token from Firebase Auth and returns user profile.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idToken:
+                  type: string
+                  description: Firebase ID Token
+              required:
+                - idToken
+      responses:
+        '200':
+          description: Verification successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Unauthorized / Invalid token
+
+  /bookings:
+    post:
+      summary: Create a booking (Rider)
+      description: Initiates a new ride request from a passenger.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                pickupLocation:
+                  $ref: '#/components/schemas/Location'
+                dropoffLocation:
+                  $ref: '#/components/schemas/Location'
+                pickupAddress:
+                  type: string
+                dropoffAddress:
+                  type: string
+                accessibilityMode:
+                  type: boolean
+                  default: true
+              required:
+                - pickupLocation
+                - dropoffLocation
+      responses:
+        '201':
+          description: Booking created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+
+  /bookings/{bookingId}:
+    get:
+      summary: Get booking details
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Booking details retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '404':
+          description: Booking not found
+
+  /bookings/{bookingId}/status:
+    patch:
+      summary: Update booking status
+      description: Used by matching engine or driver to update the status (e.g., ACCEPTED, ARRIVED, IN_PROGRESS, COMPLETED, CANCELLED).
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [PENDING, ACCEPTED, ARRIVED, IN_PROGRESS, COMPLETED, CANCELLED]
+                driverId:
+                  type: string
+              required:
+                - status
+      responses:
+        '200':
+          description: Booking status updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+
+  /drivers/location:
+    post:
+      summary: Update driver location
+      description: Sent periodically by the driver's app. Updates location and triggers real-time geofencing checks.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                driverId:
+                  type: string
+                location:
+                  $ref: '#/components/schemas/Location'
+                bearing:
+                  type: number
+                  description: Heading of the vehicle in degrees (0-360)
+              required:
+                - driverId
+                - location
+      responses:
+        '200':
+          description: Location updated successfully
+
+  /drivers/{driverId}/beacon:
+    get:
+      summary: Get driver's BLE beacon metadata
+      description: Returns the UUID, Major, and Minor values of the beacon broadcasting from the driver's device.
+      parameters:
+        - name: driverId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Beacon metadata details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  driverId:
+                    type: string
+                  uuid:
+                    type: string
+                  major:
+                    type: integer
+                  minor:
+                    type: integer
+                required:
+                  - driverId
+                  - uuid
+                  - major
+                  - minor
+        '404':
+          description: Beacon info not found for driver
+
+  /ai/session:
+    post:
+      summary: Establish WebRTC session for Gemini Live
+      description: Requests a WebRTC connection configuration (SDP offer/answer exchange) to establish low-latency bidirectional voice stream with the AI Gateway.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sdpOffer:
+                  type: string
+                  description: WebRTC SDP offer from client
+                userId:
+                  type: string
+              required:
+                - sdpOffer
+                - userId
+      responses:
+        '200':
+          description: Connection metadata and SDP answer
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sdpAnswer:
+                    type: string
+                    description: WebRTC SDP answer from AI gateway
+                  sessionId:
+                    type: string
+                required:
+                  - sdpAnswer
+                  - sessionId
+
+components:
+  schemas:
+    Location:
+      type: object
+      properties:
+        latitude:
+          type: number
+          format: float
+        longitude:
+          type: number
+          format: float
+      required:
+        - latitude
+        - longitude
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        phoneNumber:
+          type: string
+        role:
+          type: string
+          enum: [RIDER, DRIVER]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - role
+
+    Booking:
+      type: object
+      properties:
+        id:
+          type: string
+        riderId:
+          type: string
+        driverId:
+          type: string
+        pickupLocation:
+          $ref: '#/components/schemas/Location'
+        dropoffLocation:
+          $ref: '#/components/schemas/Location'
+        pickupAddress:
+          type: string
+        dropoffAddress:
+          type: string
+        status:
+          type: string
+          enum: [PENDING, ACCEPTED, ARRIVED, IN_PROGRESS, COMPLETED, CANCELLED]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - riderId
+        - pickupLocation
+        - dropoffLocation
+        - status
