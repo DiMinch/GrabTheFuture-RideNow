@@ -275,33 +275,39 @@ class NominatimGeocoder:
 
         result = _do_search(params)
 
-        # GPS-aware validation: if we have user GPS and the result is suspiciously far,
-        # retry with the original (un-normalized) address and a strict tight GPS bounding box.
-        if result and latitude is not None and longitude is not None:
-            dist_km = self._haversine_distance(latitude, longitude, result["lat"], result["lng"])
-            if dist_km > GPS_VALIDATION_KM:
-                print(
-                    f"[Geocoder] Result '{result['display_name']}' is {dist_km:.1f}km from user GPS "
-                    f"({latitude}, {longitude}) - exceeds {GPS_VALIDATION_KM}km threshold. "
-                    f"Retrying with strict GPS bounding and original address."
-                )
-                # Retry: original address (not GeoVina-normalized), stricter ~2km viewport, bounded=1
-                retry_params = {
-                    "q": original_address,
-                    "format": "json",
-                    "limit": 3,
-                    "addressdetails": 1,
-                    "countrycodes": country_code,
-                    "viewbox": f"{longitude - 0.02},{latitude + 0.02},{longitude + 0.02},{latitude - 0.02}",
-                    "bounded": 1,
-                }
-                retry_result = _do_search(retry_params)
-                if retry_result:
-                    dist_retry = self._haversine_distance(latitude, longitude, retry_result["lat"], retry_result["lng"])
-                    print(f"[Geocoder] Strict-bounded retry succeeded: '{retry_result['display_name']}' ({dist_retry:.1f}km from user)")
-                    return retry_result
-                else:
-                    print(f"[Geocoder] Strict-bounded retry found no result. Returning original (far) result.")
+        # If no result found and country is Vietnam, attempt fallback by stripping ward/district segments
+        if not result and country_code == "vn":
+            # Fallback 1: Strip ward-level segments (e.g., Phường Bến Cờ)
+            parts = [p.strip() for p in address.split(",")]
+            if len(parts) > 2:
+                ward_stripped = []
+                for p in parts:
+                    lower_p = p.lower()
+                    if lower_p.startswith(("phường", "p.", "xã")):
+                        continue
+                    ward_stripped.append(p)
+                if len(ward_stripped) < len(parts):
+                    fallback_address = ", ".join(ward_stripped)
+                    print(f"[Geocoder] Geocoding failed for normalized address. Retrying with ward stripped: '{fallback_address}'")
+                    fallback_params = params.copy()
+                    fallback_params["q"] = fallback_address
+                    result = _do_search(fallback_params)
+            
+            # Fallback 2: Strip both ward-level and district-level segments (e.g., Phường Bến Cờ, Quận 3)
+            if not result and len(parts) > 2:
+                district_stripped = []
+                for p in parts[:-1]:  # Keep the province/city at the end intact
+                    lower_p = p.lower()
+                    if lower_p.startswith(("phường", "p.", "xã", "quận", "q.", "huyện", "thị xã")):
+                        continue
+                    district_stripped.append(p)
+                district_stripped.append(parts[-1])  # Add the province back
+                if len(district_stripped) < len(parts):
+                    fallback_address = ", ".join(district_stripped)
+                    print(f"[Geocoder] Geocoding failed again. Retrying with ward and district stripped: '{fallback_address}'")
+                    fallback_params = params.copy()
+                    fallback_params["q"] = fallback_address
+                    result = _do_search(fallback_params)
 
         return result
 

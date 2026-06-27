@@ -72,7 +72,7 @@ async def send_messages(websocket):
     print("[Client -> Gateway] Đã gửi ngữ cảnh vị trí GPS.")
     await asyncio.sleep(1)
     # 2. Đọc file ghi âm mẫu và stream dạng chunk
-    wav_path = "app/tests/voice_sample_3.wav"
+    wav_path = "app/tests/voice_sample_4.wav"
     try:
         with wave.open(wav_path, "rb") as wf:
             # Kiểm tra định dạng file WAV để cảnh báo nếu sai tần số

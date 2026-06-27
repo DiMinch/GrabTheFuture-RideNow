@@ -114,34 +114,43 @@ def test_haversine_distance():
     # Khoảng cách 0 với cùng tọa độ
     assert geocoder._haversine_distance(10.0, 106.0, 10.0, 106.0) == 0.0
 
-def test_geocode_gps_validation_retry():
-    """Đảm bảo geocode retry với địa chỉ gốc và strict bounding khi kết quả ban đầu quá xa user GPS."""
+def test_geocode_fallback_stripping():
+    """Đảm bảo geocode tự động fallback bằng cách lược bỏ phường/quận khi Nominatim không trả về kết quả."""
     geocoder = NominatimGeocoder()
-    # Giả lập user đang ở Quận 3, TP.HCM (10.776, 106.690)
-    user_lat, user_lng = 10.776, 106.690
-
-    # Kết quả lần 1: Nominatim trả về tọa độ xa (10km+), giống như bị hallucinate sai quận
-    far_result = [{"lat": "10.870", "lon": "106.803", "display_name": "Sai địa điểm xa"}]
-    # Kết quả lần 2 (retry bounded): Nominatim trả về tọa độ gần đúng
-    near_result = [{"lat": "10.778", "lon": "106.691", "display_name": "Đúng địa điểm gần"}]
-
-    call_count = {"n": 0}
+    
+    # Giả lập phản hồi từ Nominatim:
+    # Lần 1: Tìm kiếm địa chỉ đầy đủ có lỗi "Bến Cờ" -> không có kết quả []
+    # Lần 2 (Fallback): Tìm kiếm với địa chỉ đã lược bỏ phường -> trả về tọa độ đúng
+    success_result = [{"lat": "10.7745", "lon": "106.6800", "display_name": "50 Cao Thắng, Phường Bàn Cờ, Quận 3, TP.HCM"}]
+    
+    queries_made = []
     def mock_get_side_effect(url, params=None, headers=None, timeout=None):
-        call_count["n"] += 1
+        queries_made.append(params.get("q"))
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        if call_count["n"] == 1:
-            mock_resp.json.return_value = far_result
+        if "Phường Bến Cờ" in params.get("q"):
+            mock_resp.json.return_value = []
         else:
-            mock_resp.json.return_value = near_result
+            mock_resp.json.return_value = success_result
         return mock_resp
 
     with patch("requests.get", side_effect=mock_get_side_effect):
         with patch("requests.post") as mock_post:
-            mock_post.return_value = MagicMock(status_code=401)
-            result = geocoder.geocode("50 Cao Thắng, Phường Bến Cờ", user_lat, user_lng)
+            # Giả lập GeoVina không tìm thấy nên trả về nguyên văn cùng cảnh báo
+            mock_post.return_value = MagicMock(
+                status_code=200,
+                json=lambda: {
+                    "success": True,
+                    "data": {
+                        "full_new_address": "50 Cao Thắng, Phường Bến Cờ, TP. Hồ Chí Minh"
+                    }
+                }
+            )
+            result = geocoder.geocode("50 Cao Thắng, Phường Bến Cờ, TP. Hồ Chí Minh")
 
     assert result is not None
-    assert result["display_name"] == "Đúng địa điểm gần"
-    assert call_count["n"] == 2  # Đã gọi 2 lần: lần 1 bị reject vì xa, lần 2 retry bounded
+    assert result["display_name"] == "50 Cao Thắng, Phường Bàn Cờ, Quận 3, TP.HCM"
+    assert len(queries_made) == 2
+    assert "Phường Bến Cờ" in queries_made[0]
+    assert "Phường Bến Cờ" not in queries_made[1]  # Phường Bến Cờ đã bị strip ở lần 2
 
