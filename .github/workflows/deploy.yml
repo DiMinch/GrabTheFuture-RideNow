@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - dev(ai)-minh
+      - dev(fe)-minh
     paths:
       - 'ai-gateway/**'
       - '.github/workflows/deploy.yml'
