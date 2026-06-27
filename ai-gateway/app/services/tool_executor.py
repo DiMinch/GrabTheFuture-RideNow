@@ -38,6 +38,7 @@ async def execute_tool(tool_name: str, args: dict, context: dict) -> dict:
         dropoff_address = args.get("dropoff_address", "Destination Address")
 
         payload = {
+            "riderId": context.get("userId", "mock-user-123"),
             "pickupLocation": {"latitude": pickup_lat, "longitude": pickup_lng},
             "dropoffLocation": {"latitude": dropoff_lat, "longitude": dropoff_lng},
             "pickupAddress": "Current Location", # Backfilled or parsed

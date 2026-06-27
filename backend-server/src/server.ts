@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import apiRouter from './routes/index.js';
+import bookingRouter from './routes/booking.js';
 
 const app = express();
 
@@ -9,6 +10,7 @@ app.use(cors());
 app.use(express.json());
 
 // Routes
+app.use('/bookings', bookingRouter);
 app.use('/', apiRouter);
 
 // Health Check

@@ -21,12 +21,15 @@ export interface Driver {
 export interface Booking {
     id?: string;
     riderId: string;
-    driverId?: string;
+    driverId?: string | null;
     pickupLocation: GeoPoint;
-    destinationLocation: GeoPoint;
+    dropoffLocation: GeoPoint; // Mapped to dropoffLocation to align with OpenAPI and AI Gateway
+    pickupAddress?: string;
+    dropoffAddress?: string;
     accessibilityMode: boolean; // Flag để hệ thống lọc tài xế
     status: 'pending' | 'accepted' | 'in_progress' | 'completed' | 'cancelled';
     createdAt: Date;
+    updatedAt?: Date;
 }
 
 // 4. Dữ liệu phản hồi API
