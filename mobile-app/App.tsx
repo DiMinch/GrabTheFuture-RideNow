@@ -15,10 +15,14 @@ import {
 // import { useProximitySensor } from './src/hooks/useProximitySensor';
 // import { useVoiceAgent } from './src/hooks/useVoiceAgent';
 
+import DriverHomeScreen from './src/screens/driver/DriverHomeScreen';
+import DriverTrackingScreen from './src/screens/driver/DriverTrackingScreen';
+
 const App = (): React.JSX.Element => {
   const isDarkMode = useColorScheme() === 'dark';
   const [appMode, setAppMode] = useState<'rider' | 'driver'>('rider');
   const [isVoiceActive, setIsVoiceActive] = useState(false);
+  const [driverState, setDriverState] = useState<'idle' | 'tracking'>('idle');
 
   const backgroundStyle = {
     backgroundColor: isDarkMode ? '#121212' : '#F5F6FA',
@@ -105,41 +109,19 @@ const App = (): React.JSX.Element => {
         </View>
       ) : (
         /* DRIVER INTERFACE */
-        <View style={styles.container}>
-          <View style={[styles.card, { backgroundColor: isDarkMode ? '#1E1E1E' : '#FFFFFF' }]}>
-            <Text style={[styles.cardTitle, { color: isDarkMode ? '#FFFFFF' : '#1A1A1A' }]}>
-              Incoming Accessibility Ride
-            </Text>
-            <View style={styles.divider} />
-            <Text style={[styles.cardDetail, { color: isDarkMode ? '#CCC' : '#555' }]}>
-              Passenger: Visually Impaired Rider
-            </Text>
-            <Text style={[styles.cardDetail, { color: isDarkMode ? '#CCC' : '#555' }]}>
-              Pickup: 235 Nguyen Van Cu, Ward 4, District 5
-            </Text>
-
-            <TouchableOpacity
-              style={styles.driverButton}
-              onPress={() => Alert.alert('Ride Accepted', 'Starting navigation and broadcasting BLE beacon.')}
-            >
-              <Text style={styles.driverButtonText}>ACCEPT & ACTIVATE BEACON</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.statusPanel}>
-            <Text style={[styles.statusTitle, { color: isDarkMode ? '#888' : '#666' }]}>
-              DRIVER ACCESSIBILITY BROADCAST
-            </Text>
-            <View style={styles.statusRow}>
-              <Text style={[styles.statusLabel, { color: isDarkMode ? '#DDD' : '#333' }]}>BLE Transmitting:</Text>
-              <Text style={styles.statusValueActive}>ON (Major: 1, Minor: 102)</Text>
-            </View>
-            <View style={styles.statusRow}>
-              <Text style={[styles.statusLabel, { color: isDarkMode ? '#DDD' : '#333' }]}>TTS Audio Alerts:</Text>
-              <Text style={styles.statusValueActive}>ENABLED (Speaker)</Text>
-            </View>
-          </View>
-        </View>
+        driverState === 'idle' ? (
+          <DriverHomeScreen 
+            onAcceptRide={() => setDriverState('tracking')} 
+            onRejectRide={() => Alert.alert('Rejected', 'You have rejected this ride.')}
+          />
+        ) : (
+          <DriverTrackingScreen 
+            onConfirmPickup={() => {
+              Alert.alert('Pickup Confirmed', 'Passenger has been picked up. Starting navigation to destination.');
+              setDriverState('idle'); // In a real app this would go to 'enroute'
+            }} 
+          />
+        )
       )}
     </SafeAreaView>
   );
