@@ -4,7 +4,6 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import * as Speech from 'expo-speech';
@@ -30,7 +29,18 @@ const VOICE_PROMPTS = {
 };
 
 const BOOKING_DESTINATION = 'Bến xe Miền Đông Mới';
-const MOCK_RIDE_ID = 'ride_999';
+
+// Định nghĩa Base URL của Backend (nên đưa vào file .env trong thực tế)
+const API_BASE_URL = 'http://localhost:3000'; // Thay bằng IP thật của backend
+
+// Cấu trúc dữ liệu gửi đi (Request Body) theo chuẩn OpenAPI
+interface BookingRequest {
+  pickupLocation: { latitude: number; longitude: number };
+  dropoffLocation: { latitude: number; longitude: number };
+  pickupAddress?: string;
+  dropoffAddress?: string;
+  accessibilityMode?: boolean;
+}
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -55,14 +65,23 @@ function speakAsync(text: string, language = 'vi-VN'): Promise<void> {
   });
 }
 
-async function mockPost(endpoint: string, payload: unknown): Promise<{ ok: true; endpoint: string; payload: unknown }> {
-  await delay(700);
+// Hàm gọi API thật tới Backend
+async function createBooking(payload: BookingRequest) {
+  const response = await fetch(`${API_BASE_URL}/bookings`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      // 'Authorization': 'Bearer YOUR_TOKEN' // Mở comment nếu cần token
+    },
+    body: JSON.stringify(payload),
+  });
 
-  return {
-    ok: true,
-    endpoint,
-    payload,
-  };
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Lỗi hệ thống khi đặt xe');
+  }
+
+  return await response.json();
 }
 
 export default function RiderHomeScreen({ navigation }: RiderHomeScreenProps): React.JSX.Element {
@@ -72,7 +91,6 @@ export default function RiderHomeScreen({ navigation }: RiderHomeScreenProps): R
 
   useEffect(() => {
     isMountedRef.current = true;
-
     void speakAsync(VOICE_PROMPTS.idle);
 
     return () => {
@@ -93,10 +111,10 @@ export default function RiderHomeScreen({ navigation }: RiderHomeScreenProps): R
 
         try {
           await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          await mockPost('/api/v1/voice/connect', {
-            session: 'voice-session-mock',
-            mode: 'listen',
-          });
+          
+          // SỬA Ở ĐÂY: Thay mockPost bằng delay để giả lập khởi động ghi âm giọng nói
+          await delay(500); 
+          
         } finally {
           isBusyRef.current = false;
         }
@@ -110,14 +128,28 @@ export default function RiderHomeScreen({ navigation }: RiderHomeScreenProps): R
 
         try {
           await speakAsync(VOICE_PROMPTS.processing);
-          await mockPost('/api/v1/rides/book', {
-            destination: BOOKING_DESTINATION,
-            ride_type: 'passenger_accessibility',
+          
+          // Gọi API backend thật
+          const bookingResponse = await createBooking({
+            pickupLocation: { latitude: 10.762622, longitude: 106.660172 },
+            dropoffLocation: { latitude: 10.864319, longitude: 106.804961 },
+            pickupAddress: "Vị trí hiện tại của bạn",
+            dropoffAddress: BOOKING_DESTINATION,
+            accessibilityMode: true
           });
 
+          // Nhận response thành công
           if (isMountedRef.current) {
             setPhase('BOOKED');
-            navigation.navigate('ActiveRide', { ride_id: MOCK_RIDE_ID });
+            navigation.navigate('ActiveRide', { ride_id: bookingResponse.id });
+          }
+
+        } catch (error: any) {
+          console.error("Lỗi khi gọi API đặt xe:", error);
+          
+          if (isMountedRef.current) {
+            setPhase('IDLE');
+            await speakAsync('Xin lỗi, hệ thống đặt xe đang gặp sự cố. Vui lòng chạm để thử lại.');
           }
         } finally {
           isBusyRef.current = false;
@@ -140,15 +172,12 @@ export default function RiderHomeScreen({ navigation }: RiderHomeScreenProps): R
     if (phase === 'IDLE') {
       return <Text style={styles.primaryText}>Chạm vào màn hình để ra lệnh giọng nói.</Text>;
     }
-
     if (phase === 'LISTENING') {
       return <Text style={styles.primaryText}>Đang ghi nhận lệnh. Chạm lần nữa để gửi.</Text>;
     }
-
     if (phase === 'PROCESSING') {
       return <Text style={styles.primaryText}>Đang xử lý yêu cầu đặt xe...</Text>;
     }
-
     return <Text style={styles.primaryText}>Đặt xe thành công. Đang mở hành trình.</Text>;
   };
 
@@ -173,9 +202,9 @@ export default function RiderHomeScreen({ navigation }: RiderHomeScreenProps): R
         {phase === 'IDLE'
           ? 'TTS sẽ đọc hướng dẫn ngay khi màn hình mở.'
           : phase === 'LISTENING'
-            ? 'Mikro ảo đang mở. Chạm thêm lần nữa để gửi lệnh.'
+            ? 'Micro ảo đang mở. Chạm thêm lần nữa để gửi lệnh.'
             : phase === 'PROCESSING'
-              ? 'Hệ thống đang mô phỏng gọi backend đặt xe.'
+              ? 'Hệ thống đang gọi API đặt xe...'
               : 'Mở màn hình điều hướng hành trình.'}
       </Text>
     </TouchableOpacity>
