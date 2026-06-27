@@ -2,23 +2,112 @@ import os
 import asyncio
 import websockets
 import json
+from app.services.tool_executor import execute_tool
+from app.core.prompts import get_system_instruction
 
 class GeminiLiveService:
     """
     Service wrapper for Gemini Multimodal Live API connections.
-    Manages low-latency audio streaming and instruction feeding.
+    Manages low-latency audio streaming, instruction feeding, and tool execution.
     """
-    def __init__(self, api_key: str, model: str):
+    def __init__(self, api_key: str, model: str, context: dict = None):
         self.api_key = api_key
         self.model = model
+        self.context = context or {}
         # URI for Gemini Live WebSockets (Gemini Multimodal Live API)
         self.host_uri = f"wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key={self.api_key}"
 
-    async def connect_and_stream(self, incoming_audio_queue: asyncio.Queue, outgoing_audio_queue: asyncio.Queue):
+    def _get_setup_message(self) -> dict:
+        """
+        Generates the initial configuration setup message for Gemini Live.
+        Dynamically adjusts instructions based on language ('vi' or 'en') and
+        GPS coordinates passed from the mobile frontend.
+        """
+        lat = self.context.get("latitude", 10.762622)
+        lng = self.context.get("longitude", 106.660172)
+        lang = self.context.get("lang", "vi").lower()
+        
+        system_instruction = get_system_instruction(lang, lat, lng)
+
+
+        tools = [
+            {
+                "functionDeclarations": [
+                    {
+                        "name": "geocode_address",
+                        "description": "Chuyển địa điểm/địa chỉ bằng chữ sang tọa độ GPS.",
+                        "parameters": {
+                            "type": "OBJECT",
+                            "properties": {
+                                "address": {
+                                    "type": "STRING",
+                                    "description": "Địa chỉ hoặc tên địa điểm hành khách muốn đến."
+                                }
+                            },
+                            "required": ["address"]
+                        }
+                    },
+                    {
+                        "name": "create_booking",
+                        "description": "Đặt xe với tọa độ đón (pickup) và tọa độ đến (dropoff).",
+                        "parameters": {
+                            "type": "OBJECT",
+                            "properties": {
+                                "pickup_lat": {
+                                    "type": "NUMBER",
+                                    "description": "Vĩ độ điểm đón."
+                                },
+                                "pickup_lng": {
+                                    "type": "NUMBER",
+                                    "description": "Kinh độ điểm đón."
+                                },
+                                "dropoff_lat": {
+                                    "type": "NUMBER",
+                                    "description": "Vĩ độ điểm đến."
+                                },
+                                "dropoff_lng": {
+                                    "type": "NUMBER",
+                                    "description": "Kinh độ điểm đến."
+                                },
+                                "dropoff_address": {
+                                    "type": "STRING",
+                                    "description": "Địa chỉ bằng chữ của điểm đến."
+                                }
+                            },
+                            "required": ["pickup_lat", "pickup_lng", "dropoff_lat", "dropoff_lng", "dropoff_address"]
+                        }
+                    }
+                ]
+            }
+        ]
+
+        return {
+            "setup": {
+                "model": f"models/{self.model}",
+                "generationConfig": {
+                    "responseModalities": ["AUDIO"],
+                    "speechConfig": {
+                        "voiceConfig": {
+                            "prebuiltVoiceConfig": {
+                                "voiceName": "Puck"
+                            }
+                        }
+                    }
+                },
+                "systemInstruction": {
+                    "parts": [
+                        {"text": system_instruction}
+                    ]
+                },
+                "tools": tools
+            }
+        }
+
+    async def connect_and_stream(self, incoming_audio_queue: asyncio.Queue, outgoing_payload_queue: asyncio.Queue):
         """
         Connects bidirectionally to Gemini Live API.
         Reads incoming chunks from mobile app, uploads to Gemini,
-        receives Gemini response audio chunks, and pushes to outgoing queue.
+        receives response audio chunks or tool calls, and pushes outputs to queue.
         """
         if not self.api_key:
             print("[Gemini] API Key missing. Skipping connection.")
@@ -27,34 +116,19 @@ class GeminiLiveService:
         async with websockets.connect(self.host_uri) as gemini_ws:
             print("[Gemini] Connected to Gemini Multimodal Live API.")
             
-            # Send initial configuration session setup
-            setup_message = {
-                "setup": {
-                    "model": f"models/{self.model}",
-                    "generationConfig": {
-                        "responseModalities": ["AUDIO"],
-                        "speechConfig": {
-                            "voiceConfig": {
-                                "prebuiltVoiceConfig": {
-                                    "voiceName": "Puck" # Or Aoede, Fenrir, Kore, Puck
-                                }
-                            }
-                        }
-                    },
-                    "systemInstruction": {
-                        "parts": [
-                            {"text": "Bạn là Trợ lý giọng nói RideNow dành cho người khiếm thị. Hãy giúp họ đặt xe ôm công nghệ nhanh chóng. Nhận diện điểm đến của họ và trả lời cực kỳ ngắn gọn, ấm áp qua giọng nói."}
-                        ]
-                    }
-                }
-            }
-            await gemini_ws.send(json.dumps(setup_message))
+            # Send setup configuration
+            setup_msg = self._get_setup_message()
+            await gemini_ws.send(json.dumps(setup_msg))
 
             async def send_loop():
                 try:
                     while True:
-                        # Fetch audio chunk from incoming queue
                         chunk = await incoming_audio_queue.get()
+                        
+                        # Stop loop if end of stream sentinel is received
+                        if chunk is None or chunk == "END":
+                            incoming_audio_queue.task_done()
+                            break
                         
                         # Pack into Gemini Live API payload
                         payload = {
@@ -69,6 +143,8 @@ class GeminiLiveService:
                         }
                         await gemini_ws.send(json.dumps(payload))
                         incoming_audio_queue.task_done()
+                except asyncio.CancelledError:
+                    pass
                 except Exception as e:
                     print(f"[Gemini] Send loop error: {e}")
 
@@ -77,17 +153,60 @@ class GeminiLiveService:
                     async for response in gemini_ws:
                         data = json.loads(response)
                         
-                        # Process response chunks (audio bytes output)
+                        # 1. Process standard audio/text responses
                         if "serverContent" in data:
                             parts = data["serverContent"].get("modelTurn", {}).get("parts", [])
                             for part in parts:
                                 if "inlineData" in part:
                                     audio_base64 = part["inlineData"].get("data")
                                     if audio_base64:
-                                        # Queue audio bytes to send back to mobile app
-                                        await outgoing_audio_queue.put(audio_base64)
+                                        await outgoing_payload_queue.put({
+                                            "type": "audio",
+                                            "data": audio_base64
+                                        })
+                        
+                        # 2. Process function calls (tool requests) from Gemini
+                        elif "toolCall" in data:
+                            function_calls = data["toolCall"].get("functionCalls", [])
+                            for call in function_calls:
+                                call_id = call.get("id")
+                                name = call.get("name")
+                                args = call.get("args", {})
+                                
+                                # Execute function call (returns a native dict)
+                                result_dict = await execute_tool(name, args, self.context)
+                                
+                                # Send result back to Gemini
+                                tool_response_msg = {
+                                    "toolResponse": {
+                                        "functionResponses": [
+                                            {
+                                                "response": {"output": result_dict},
+                                                "id": call_id,
+                                                "name": name # Required by Gemini schema
+                                            }
+                                        ]
+                                    }
+                                }
+                                await gemini_ws.send(json.dumps(tool_response_msg))
+                                
+                                # Also notify the mobile client about the execution results
+                                await outgoing_payload_queue.put({
+                                    "type": "action_result",
+                                    "tool": name,
+                                    "result": result_dict
+                                })
+                except asyncio.CancelledError:
+                    pass
                 except Exception as e:
                     print(f"[Gemini] Receive loop error: {e}")
 
             # Run loops in parallel
-            await asyncio.gather(send_loop(), receive_loop())
+            send_task = asyncio.create_task(send_loop())
+            recv_task = asyncio.create_task(receive_loop())
+            
+            try:
+                await asyncio.gather(send_task, recv_task)
+            finally:
+                send_task.cancel()
+                recv_task.cancel()
