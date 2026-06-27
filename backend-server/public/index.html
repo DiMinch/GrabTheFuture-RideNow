@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RideNow - Admin Live Dashboard</title>
+  <link rel="stylesheet" href="index.css">
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar -->
+    <aside>
+      <div>
+        <div class="logo-container">
+          <div class="logo-icon">RN</div>
+          <div class="logo-text">
+            <h1>RideNow</h1>
+            <span>Smart Mobility</span>
+          </div>
+        </div>
+        <nav class="nav-links">
+          <button class="nav-btn active" onclick="switchView('overview')">
+            <i data-lucide="layout-dashboard"></i> Tổng quan
+          </button>
+          <button class="nav-btn" onclick="switchView('drivers')">
+            <i data-lucide="users"></i> Quản lý Tài xế
+          </button>
+          <button class="nav-btn" onclick="switchView('bookings')">
+            <i data-lucide="navigation"></i> Đơn đặt xe (Live)
+          </button>
+        </nav>
+      </div>
+      <div class="sidebar-footer">
+        <p>RideNow Admin v1.0</p>
+        <p>© 2026 GRAB-UNDP</p>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main>
+      <!-- Top Header -->
+      <header>
+        <div class="header-title">
+          <h2 id="view-title">Tổng quan Hệ thống</h2>
+        </div>
+        <div class="header-actions">
+          <div class="status-indicator">
+            <span class="status-dot" id="db-status-dot"></span>
+            <span id="db-status-text">Firestore Đã kết nối</span>
+          </div>
+          <button class="btn btn-secondary" onclick="reSeedDatabase()">
+            <i data-lucide="refresh-cw"></i> Reset & Seed DB
+          </button>
+        </div>
+      </header>
+
+      <!-- Scrollable Content -->
+      <div class="view-content">
+        <!-- Overview View -->
+        <div id="view-overview" class="view active">
+          <!-- Stats Cards -->
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-icon"><i data-lucide="users"></i></div>
+              <div class="stat-info">
+                <h4>Tổng Tài xế</h4>
+                <p id="stat-total-drivers">0</p>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon success"><i data-lucide="check-circle-2"></i></div>
+              <div class="stat-info">
+                <h4>Tài xế Đang Rảnh</h4>
+                <p id="stat-available-drivers">0</p>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon accent"><i data-lucide="activity"></i></div>
+              <div class="stat-info">
+                <h4>Đơn Đang Chạy</h4>
+                <p id="stat-active-bookings">0</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <!-- HCMC Map Simulator -->
+            <div class="card">
+              <div class="card-title">
+                <span>Bản đồ Mô phỏng Real-time (Kéo tài xế để cập nhật GPS)</span>
+                <span style="font-size: 12px; font-weight: normal; color: var(--text-secondary);">Khu vực TP.HCM</span>
+              </div>
+              <div class="map-canvas-container">
+                <svg id="hcm-map" class="map-svg" viewBox="0 0 800 480" xmlns="http://www.w3.org/2000/svg">
+                  <!-- Grid Lines -->
+                  <defs>
+                    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255,255,255,0.03)" stroke-width="1"/>
+                    </pattern>
+                  </defs>
+                  <rect width="100%" height="100%" fill="url(#grid)" />
+                  <rect width="100%" height="100%" fill="none" stroke="var(--border-glass)" stroke-width="2"/>
+                  
+                  <!-- Coordinate System Labels -->
+                  <text x="10" y="465" class="map-axis-label">10.70°N, 106.60°E</text>
+                  <text x="700" y="465" class="map-axis-label">106.85°E</text>
+                  <text x="10" y="20" class="map-axis-label">10.90°N</text>
+                  
+                  <!-- Booking route paths will be drawn here dynamically -->
+                  <g id="map-routes"></g>
+                  <!-- Booking endpoints markers -->
+                  <g id="map-booking-markers"></g>
+                  <!-- Drivers markers -->
+                  <g id="map-driver-markers"></g>
+                </svg>
+                <div id="map-tooltip" class="map-tooltip"></div>
+              </div>
+            </div>
+
+            <!-- Live Bookings Sidebar -->
+            <div class="card" style="height: 528px; display: flex; flex-direction: column; overflow: hidden;">
+              <div class="card-title">Đơn đặt xe mới nhất</div>
+              <div style="flex-grow: 1; overflow-y: auto;" id="overview-bookings-list">
+                <p style="color: var(--text-muted); text-align: center; margin-top: 40px;">Đang tải...</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Drivers View -->
+        <div id="view-drivers" class="view">
+          <div class="grid-2">
+            <!-- Drivers list -->
+            <div class="card">
+              <div class="card-title">Danh sách Tài xế</div>
+              <div class="driver-grid" id="drivers-list">
+                <!-- Driver Cards will be rendered here -->
+              </div>
+            </div>
+
+            <!-- Add Driver Form -->
+            <div class="card">
+              <div class="card-title">Thêm Tài xế mới</div>
+              <form id="add-driver-form" onsubmit="createNewDriver(event)">
+                <div class="form-group">
+                  <label for="new-driver-name">Họ và tên</label>
+                  <input type="text" id="new-driver-name" class="form-control" placeholder="Ví dụ: Nguyễn Văn C" required>
+                </div>
+                <div class="form-group">
+                  <label for="new-driver-plate">Biển số xe</label>
+                  <input type="text" id="new-driver-plate" class="form-control" placeholder="Ví dụ: 59P1-12345" required>
+                </div>
+                <div class="form-group">
+                  <label for="new-driver-beacon">Cấu hình BLE Beacon (Major:Minor)</label>
+                  <input type="text" id="new-driver-beacon" class="form-control" placeholder="Ví dụ: 1:104" value="1:104">
+                </div>
+                <div class="form-row-2">
+                  <div class="form-group">
+                    <label for="new-driver-lat">Vĩ độ (Latitude)</label>
+                    <input type="number" step="0.000001" id="new-driver-lat" class="form-control" value="10.8756">
+                  </div>
+                  <div class="form-group">
+                    <label for="new-driver-lng">Kinh độ (Longitude)</label>
+                    <input type="number" step="0.000001" id="new-driver-lng" class="form-control" value="106.8007">
+                  </div>
+                </div>
+                <div class="form-group">
+                  <div class="checkbox-group">
+                    <input type="checkbox" id="new-driver-friendly" checked>
+                    <label for="new-driver-friendly">Thân thiện với người khiếm thị (Accessibility Friendly)</label>
+                  </div>
+                </div>
+                <button type="submit" class="btn" style="width: 100%; margin-top: 10px;">
+                  <i data-lucide="plus"></i> Tạo Tài xế
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bookings View -->
+        <div id="view-bookings" class="view">
+          <div class="card">
+            <div class="card-title">Quản lý Đơn đặt xe</div>
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Mã Đơn</th>
+                    <th>Khách hàng</th>
+                    <th>Điểm đón (Pickup)</th>
+                    <th>Điểm đến (Dropoff)</th>
+                    <th>Tài xế</th>
+                    <th>Trạng thái</th>
+                    <th>Thời gian</th>
+                    <th>Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody id="bookings-table-body">
+                  <!-- Booking rows will be rendered here -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Main JavaScript Logic -->
+  <script>
+    // Configuration Coordinate Boundaries for HCM
+    const BOUNDS = {
+      latMin: 10.70,
+      latMax: 10.90,
+      lngMin: 106.60,
+      lngMax: 106.85
+    };
+    
+    let drivers = [];
+    let bookings = [];
+    let selectedDriver = null;
+    let isDragging = false;
+    let draggedDriverId = null;
+
+    // View Routing
+    function switchView(viewId) {
+      document.querySelectorAll('.view').forEach(view => view.classList.remove('active'));
+      document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+      
+      document.getElementById(`view-${viewId}`).classList.add('active');
+      
+      // Find the button that clicked
+      const activeBtn = Array.from(document.querySelectorAll('.nav-btn')).find(btn => 
+        btn.getAttribute('onclick').includes(viewId)
+      );
+      if (activeBtn) activeBtn.classList.add('active');
+
+      // Update Header Title
+      const titleEl = document.getElementById('view-title');
+      if (viewId === 'overview') titleEl.textContent = 'Tổng quan Hệ thống';
+      else if (viewId === 'drivers') titleEl.textContent = 'Quản lý Tài xế';
+      else if (viewId === 'bookings') titleEl.textContent = 'Quản lý Đơn đặt xe';
+    }
+
+    // Toast Notifications
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      
+      let icon = 'check-circle-2';
+      if (type === 'danger') icon = 'alert-triangle';
+      
+      toast.innerHTML = `<i data-lucide="${icon}"></i> <span>${message}</span>`;
+      container.appendChild(toast);
+      lucide.createIcons();
+      
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(10px)';
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
+    // API calls helper
+    async function apiFetch(path, options = {}) {
+      try {
+        const response = await fetch(path, {
+          headers: { 'Content-Type': 'application/json' },
+          ...options
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+          throw new Error(result.message || 'Lỗi xử lý API');
+        }
+        return result;
+      } catch (err) {
+        showToast(err.message, 'danger');
+        console.error(err);
+        return null;
+      }
+    }
+
+    // Convert GPS Coordinates to SVG coordinates (800 x 480)
+    function gpsToSvg(lat, lng) {
+      const w = 800;
+      const h = 480;
+      const x = ((lng - BOUNDS.lngMin) / (BOUNDS.lngMax - BOUNDS.lngMin)) * w;
+      const y = (1.0 - (lat - BOUNDS.latMin) / (BOUNDS.latMax - BOUNDS.latMin)) * h;
+      return { x, y };
+    }
+
+    // Convert SVG coordinates back to GPS
+    function svgToGps(x, y) {
+      const w = 800;
+      const h = 480;
+      const lng = BOUNDS.lngMin + (x / w) * (BOUNDS.lngMax - BOUNDS.lngMin);
+      const lat = BOUNDS.latMin + (1.0 - y / h) * (BOUNDS.latMax - BOUNDS.latMin);
+      return { lat, lng };
+    }
+
+    // Fetch and refresh dashboard data
+    async function loadData() {
+      const driversRes = await apiFetch('/api/drivers');
+      const bookingsRes = await apiFetch('/api/bookings');
+      
+      if (driversRes) drivers = driversRes.data;
+      if (bookingsRes) bookings = bookingsRes.data;
+      
+      renderStats();
+      renderDrivers();
+      renderBookings();
+      renderMap();
+      
+      document.getElementById('db-status-dot').className = 'status-dot';
+      document.getElementById('db-status-text').textContent = 'Firestore Đã kết nối';
+    }
+
+    // Render Stats
+    function renderStats() {
+      document.getElementById('stat-total-drivers').textContent = drivers.length;
+      document.getElementById('stat-available-drivers').textContent = drivers.filter(d => !d.busy).length;
+      document.getElementById('stat-active-bookings').textContent = bookings.filter(b => 
+        ['pending', 'accepted', 'in_progress'].includes(b.status)
+      ).length;
+    }
+
+    // Render Drivers View
+    function renderDrivers() {
+      const container = document.getElementById('drivers-list');
+      if (drivers.length === 0) {
+        container.innerHTML = '<p style="color:var(--text-muted)">Không có tài xế nào</p>';
+        return;
+      }
+
+      container.innerHTML = drivers.map(d => `
+        <div class="driver-card">
+          <div class="driver-card-header">
+            <div class="driver-info">
+              <h3>${d.name}</h3>
+              <p>${d.plate}</p>
+            </div>
+            <div class="driver-rating">
+              <i data-lucide="star" style="fill:var(--warning);width:14px;height:14px"></i>
+              <span>${d.rating.toFixed(1)}</span>
+            </div>
+          </div>
+          <div class="driver-details">
+            <div class="driver-detail-row">
+              <span>Trạng thái:</span>
+              <span>
+                <span class="badge ${d.busy ? 'badge-danger' : 'badge-success'}">
+                  ${d.busy ? 'Đang bận' : 'Rảnh'}
+                </span>
+              </span>
+            </div>
+            <div class="driver-detail-row">
+              <span>Hỗ trợ khiếm thị:</span>
+              <span>${d.accessibilityFriendly ? 'Có ✓' : 'Không ✗'}</span>
+            </div>
+            <div class="driver-detail-row">
+              <span>BLE Beacon:</span>
+              <span>${d.ble_major_minor || '1:100'}</span>
+            </div>
+            <div class="driver-detail-row">
+              <span>Tọa độ GPS:</span>
+              <span>${Number(d.latitude).toFixed(5)}, ${Number(d.longitude).toFixed(5)}</span>
+            </div>
+          </div>
+          <div class="driver-actions">
+            <button class="btn btn-secondary" onclick="toggleDriverBusy('${d.id}', ${d.busy})">
+              ${d.busy ? 'Mở rảnh' : 'Khóa bận'}
+            </button>
+            <button class="btn btn-secondary" onclick="toggleDriverAccessibility('${d.id}', ${d.accessibilityFriendly})">
+              Toggle Hỗ trợ
+            </button>
+            <button class="btn btn-danger" style="padding:6px" onclick="deleteDriver('${d.id}')">
+              <i data-lucide="trash-2" style="width:14px;height:14px"></i>
+            </button>
+          </div>
+        </div>
+      `).join('');
+      lucide.createIcons();
+    }
+
+    // Render Bookings List
+    function renderBookings() {
+      // 1. Overview List
+      const listEl = document.getElementById('overview-bookings-list');
+      const activeBookings = bookings.filter(b => ['pending', 'accepted', 'in_progress'].includes(b.status));
+      
+      if (activeBookings.length === 0) {
+        listEl.innerHTML = `
+          <div style="text-align:center;padding:40px 20px;color:var(--text-muted)">
+            <i data-lucide="check-circle" style="width:40px;height:40px;margin-bottom:10px"></i>
+            <p>Không có cuốc xe hoạt động</p>
+          </div>
+        `;
+      } else {
+        listEl.innerHTML = activeBookings.map(b => `
+          <div style="background:var(--bg-tertiary);border:1px solid var(--border-glass);padding:16px;border-radius:var(--radius-md);margin-bottom:12px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+              <span style="font-weight:600;font-size:14px;color:var(--primary)">ID: ${b.id.substring(0,8)}...</span>
+              <span class="badge ${getStatusBadgeClass(b.status)}">${b.status}</span>
+            </div>
+            <div style="font-size:13px;color:var(--text-secondary);display:flex;flex-direction:column;gap:4px">
+              <p>📍 Đón: ${b.pickupLocation.latitude.toFixed(5)}, ${b.pickupLocation.longitude.toFixed(5)}</p>
+              <p>🏁 Đến: ${b.dropoffAddress || b.dropoffLocation.latitude.toFixed(5)}</p>
+              <p>🚗 Tài xế: ${b.driver?.name || 'Chưa nhận'}</p>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:12px;border-top:1px solid var(--border-glass);padding-top:8px">
+              ${b.status === 'pending' ? `<button class="btn btn-secondary" style="padding:4px 8px;font-size:11px" onclick="updateBookingStatus('${b.id}', 'accepted')">Nhận cuốc</button>` : ''}
+              ${['pending', 'accepted'].includes(b.status) ? `<button class="btn btn-secondary" style="padding:4px 8px;font-size:11px" onclick="updateBookingStatus('${b.id}', 'in_progress')">Bắt đầu chạy</button>` : ''}
+              ${b.status === 'in_progress' ? `<button class="btn btn-secondary" style="padding:4px 8px;font-size:11px" onclick="updateBookingStatus('${b.id}', 'completed')">Hoàn thành</button>` : ''}
+              <button class="btn btn-danger" style="padding:4px 8px;font-size:11px" onclick="cancelBooking('${b.id}')">Hủy</button>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      // 2. Full Table List in Bookings Tab
+      const tableBody = document.getElementById('bookings-table-body');
+      if (bookings.length === 0) {
+        tableBody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted)">Không có đơn đặt xe</td></tr>';
+      } else {
+        tableBody.innerHTML = bookings.map(b => {
+          const dateStr = b.createdAt ? (b.createdAt.toDate ? b.createdAt.toDate().toLocaleTimeString() : (b.createdAt._seconds ? new Date(b.createdAt._seconds * 1000).toLocaleTimeString() : new Date(b.createdAt).toLocaleTimeString())) : '---';
+          return `
+            <tr>
+              <td style="font-family:monospace;color:var(--primary)">${b.id.substring(0,10)}...</td>
+              <td>${b.riderId || 'rider_test'}</td>
+              <td>${b.pickupLocation.latitude.toFixed(5)}, ${b.pickupLocation.longitude.toFixed(5)}</td>
+              <td title="${b.dropoffAddress || ''}">${b.dropoffAddress ? (b.dropoffAddress.length > 25 ? b.dropoffAddress.substring(0,25)+'...' : b.dropoffAddress) : b.dropoffLocation.latitude.toFixed(5)}</td>
+              <td>${b.driver?.name || 'Chưa nhận'}</td>
+              <td><span class="badge ${getStatusBadgeClass(b.status)}">${b.status}</span></td>
+              <td>${dateStr}</td>
+              <td>
+                <div style="display:flex;gap:6px">
+                  ${b.status === 'pending' ? `<button class="btn btn-secondary" style="padding:4px 8px;font-size:11px" onclick="updateBookingStatus('${b.id}', 'accepted')">Nhận</button>` : ''}
+                  ${b.status === 'accepted' ? `<button class="btn btn-secondary" style="padding:4px 8px;font-size:11px" onclick="updateBookingStatus('${b.id}', 'in_progress')">Bắt đầu</button>` : ''}
+                  ${b.status === 'in_progress' ? `<button class="btn btn-secondary" style="padding:4px 8px;font-size:11px" onclick="updateBookingStatus('${b.id}', 'completed')">Hoàn thành</button>` : ''}
+                  ${!['completed', 'cancelled'].includes(b.status) ? `<button class="btn btn-danger" style="padding:4px 8px;font-size:11px" onclick="cancelBooking('${b.id}')">Hủy</button>` : ''}
+                </div>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+      lucide.createIcons();
+    }
+
+    function getStatusBadgeClass(status) {
+      if (status === 'pending') return 'badge-warning';
+      if (status === 'accepted') return 'badge-info';
+      if (status === 'in_progress') return 'badge-info';
+      if (status === 'completed') return 'badge-success';
+      return 'badge-danger';
+    }
+
+    // Render Map elements
+    function renderMap() {
+      const routeGroup = document.getElementById('map-routes');
+      const bookingGroup = document.getElementById('map-booking-markers');
+      const driverGroup = document.getElementById('map-driver-markers');
+      
+      routeGroup.innerHTML = '';
+      bookingGroup.innerHTML = '';
+      driverGroup.innerHTML = '';
+
+      const svg = document.getElementById('hcm-map');
+      
+      // 1. Draw Active Booking Paths & Endpoints
+      bookings.filter(b => ['pending', 'accepted', 'in_progress'].includes(b.status)).forEach(b => {
+        const pickup = gpsToSvg(b.pickupLocation.latitude, b.pickupLocation.longitude);
+        const dropoff = gpsToSvg(b.dropoffLocation.latitude, b.dropoffLocation.longitude);
+
+        // Path Line
+        const pathLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        pathLine.setAttribute('x1', pickup.x);
+        pathLine.setAttribute('y1', pickup.y);
+        pathLine.setAttribute('x2', dropoff.x);
+        pathLine.setAttribute('y2', dropoff.y);
+        pathLine.setAttribute('stroke', b.status === 'in_progress' ? 'var(--primary)' : 'var(--warning)');
+        pathLine.setAttribute('stroke-width', '2');
+        pathLine.setAttribute('stroke-dasharray', '5,5');
+        routeGroup.appendChild(pathLine);
+
+        // Pickup Dot (Orange)
+        const pCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        pCircle.setAttribute('cx', pickup.x);
+        pCircle.setAttribute('cy', pickup.y);
+        pCircle.setAttribute('r', '7');
+        pCircle.setAttribute('fill', 'var(--warning)');
+        pCircle.setAttribute('stroke', '#fff');
+        pCircle.setAttribute('stroke-width', '1.5');
+        bookingGroup.appendChild(pCircle);
+
+        // Dropoff Dot (Blue)
+        const dCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        dCircle.setAttribute('cx', dropoff.x);
+        dCircle.setAttribute('cy', dropoff.y);
+        dCircle.setAttribute('r', '7');
+        dCircle.setAttribute('fill', 'var(--info)');
+        dCircle.setAttribute('stroke', '#fff');
+        dCircle.setAttribute('stroke-width', '1.5');
+        bookingGroup.appendChild(dCircle);
+      });
+
+      // 2. Draw Drivers (Draggable)
+      drivers.forEach(d => {
+        const pos = gpsToSvg(d.latitude, d.longitude);
+
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        g.setAttribute('class', 'map-marker-driver');
+        g.setAttribute('transform', `translate(${pos.x}, ${pos.y})`);
+        g.setAttribute('data-id', d.id);
+        
+        // Helper Ring for Accessibility Friendly
+        if (d.accessibilityFriendly) {
+          const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+          ring.setAttribute('r', '14');
+          ring.setAttribute('fill', 'none');
+          ring.setAttribute('stroke', 'var(--primary)');
+          ring.setAttribute('stroke-width', '1');
+          ring.setAttribute('stroke-dasharray', '3,3');
+          g.appendChild(ring);
+        }
+
+        // Main Car Marker Dot
+        const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        dot.setAttribute('r', '8');
+        dot.setAttribute('fill', d.busy ? 'var(--danger)' : 'var(--success)');
+        dot.setAttribute('stroke', '#fff');
+        dot.setAttribute('stroke-width', '2');
+        g.appendChild(dot);
+
+        // Label Text
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('y', '-14');
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('fill', 'var(--text-primary)');
+        text.setAttribute('font-size', '10px');
+        text.setAttribute('font-weight', 'bold');
+        text.textContent = d.name.split(' ').pop(); // Only show last name
+        g.appendChild(text);
+
+        // Event Listeners for Tooltip
+        g.addEventListener('mouseenter', (e) => showMapTooltip(e, d));
+        g.addEventListener('mouseleave', hideMapTooltip);
+        
+        // Drag Event Handlers
+        g.addEventListener('mousedown', (e) => startDrag(e, d.id));
+
+        driverGroup.appendChild(g);
+      });
+    }
+
+    // Tooltip Helper on Map
+    function showMapTooltip(e, driver) {
+      const tooltip = document.getElementById('map-tooltip');
+      const containerRect = e.target.ownerSVGElement.parentNode.getBoundingClientRect();
+      const markerRect = e.target.getBoundingClientRect();
+      
+      const left = markerRect.left - containerRect.left + 15;
+      const top = markerRect.top - containerRect.top - 40;
+
+      tooltip.innerHTML = `
+        <strong>${driver.name}</strong> (${driver.plate})<br/>
+        Trạng thái: ${driver.busy ? 'Bận' : 'Rảnh'}<br/>
+        GPS: ${driver.latitude.toFixed(5)}, ${driver.longitude.toFixed(5)}<br/>
+        Hỗ trợ: ${driver.accessibilityFriendly ? 'Có' : 'Không'}
+      `;
+      tooltip.style.left = `${left}px`;
+      tooltip.style.top = `${top}px`;
+      tooltip.style.opacity = '1';
+    }
+
+    function hideMapTooltip() {
+      document.getElementById('map-tooltip').style.opacity = '0';
+    }
+
+    // Drag-and-Drop Drivers on Map simulation
+    function startDrag(e, driverId) {
+      e.preventDefault();
+      isDragging = true;
+      draggedDriverId = driverId;
+      document.addEventListener('mousemove', drag);
+      document.addEventListener('mouseup', stopDrag);
+    }
+
+    function drag(e) {
+      if (!isDragging || !draggedDriverId) return;
+      
+      const svg = document.getElementById('hcm-map');
+      const rect = svg.getBoundingClientRect();
+      
+      // Calculate mouse coordinates relative to SVG
+      let x = ((e.clientX - rect.left) / rect.width) * 800;
+      let y = ((e.clientY - rect.top) / rect.height) * 480;
+
+      // Bound within map canvas
+      x = Math.max(0, Math.min(800, x));
+      y = Math.max(0, Math.min(480, y));
+
+      // Translate to GPS
+      const gps = svgToGps(x, y);
+
+      // Instantly update visual position
+      const marker = document.querySelector(`.map-marker-driver[data-id="${draggedDriverId}"]`);
+      if (marker) {
+        marker.setAttribute('transform', `translate(${x}, ${y})`);
+      }
+
+      // Live update data array position
+      const driver = drivers.find(d => d.id === draggedDriverId);
+      if (driver) {
+        driver.latitude = gps.lat;
+        driver.longitude = gps.lng;
+      }
+    }
+
+    async function stopDrag() {
+      if (!isDragging || !draggedDriverId) return;
+      
+      isDragging = false;
+      document.removeEventListener('mousemove', drag);
+      document.removeEventListener('mouseup', stopDrag);
+
+      const driver = drivers.find(d => d.id === draggedDriverId);
+      if (driver) {
+        // Send POST to /api/drivers/location API to trigger backend logic (updating Firestore and live bookings)
+        document.getElementById('db-status-dot').className = 'status-dot loading';
+        document.getElementById('db-status-text').textContent = 'Đang đồng bộ GPS...';
+        
+        const payload = {
+          driverId: driver.id,
+          location: {
+            latitude: driver.latitude,
+            longitude: driver.longitude
+          },
+          bearing: 0
+        };
+
+        const result = await apiFetch('/api/drivers/location', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+
+        if (result && result.success) {
+          showToast(`Đã cập nhật vị trí cho ${driver.name}`);
+        }
+        
+        // Refresh all data to pull database state
+        await loadData();
+      }
+      draggedDriverId = null;
+    }
+
+    // Driver management actions
+    async function createNewDriver(e) {
+      e.preventDefault();
+      
+      const payload = {
+        name: document.getElementById('new-driver-name').value,
+        plate: document.getElementById('new-driver-plate').value,
+        ble_major_minor: document.getElementById('new-driver-beacon').value,
+        latitude: parseFloat(document.getElementById('new-driver-lat').value),
+        longitude: parseFloat(document.getElementById('new-driver-lng').value),
+        accessibilityFriendly: document.getElementById('new-driver-friendly').checked,
+        busy: false
+      };
+
+      const result = await apiFetch('/api/drivers', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+
+      if (result) {
+        showToast(`Đã thêm tài xế ${payload.name}`);
+        document.getElementById('add-driver-form').reset();
+        await loadData();
+      }
+    }
+
+    async function toggleDriverBusy(id, currentBusy) {
+      const result = await apiFetch(`/api/drivers/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ busy: !currentBusy })
+      });
+      if (result) {
+        showToast('Đã thay đổi trạng thái bận');
+        await loadData();
+      }
+    }
+
+    async function toggleDriverAccessibility(id, currentFriendly) {
+      const result = await apiFetch(`/api/drivers/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ accessibilityFriendly: !currentFriendly })
+      });
+      if (result) {
+        showToast('Đã thay đổi chế độ hỗ trợ');
+        await loadData();
+      }
+    }
+
+    async function deleteDriver(id) {
+      if (!confirm('Bạn có chắc chắn muốn xóa tài xế này?')) return;
+      const result = await apiFetch(`/api/drivers/${id}`, {
+        method: 'DELETE'
+      });
+      if (result) {
+        showToast('Đã xóa tài xế thành công');
+        await loadData();
+      }
+    }
+
+    // Booking actions
+    async function updateBookingStatus(id, status) {
+      const result = await apiFetch(`/api/bookings/${id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status })
+      });
+      if (result) {
+        showToast(`Đã cập nhật trạng thái đơn thành ${status}`);
+        await loadData();
+      }
+    }
+
+    async function cancelBooking(id) {
+      if (!confirm('Bạn có chắc chắn muốn hủy đơn này?')) return;
+      const result = await apiFetch(`/api/bookings/${id}/cancel`, {
+        method: 'PUT'
+      });
+      if (result) {
+        showToast('Đã hủy đơn đặt xe thành công');
+        await loadData();
+      }
+    }
+
+    // Re-seed DB
+    async function reSeedDatabase() {
+      if (!confirm('Hành động này sẽ XÓA tất cả Đơn hàng & Tài xế cũ và khởi tạo dữ liệu Seed mặc định. Tiếp tục?')) return;
+      
+      document.getElementById('db-status-dot').className = 'status-dot loading';
+      document.getElementById('db-status-text').textContent = 'Đang Reset & Seed...';
+      
+      const result = await apiFetch('/api/drivers/seed', {
+        method: 'POST'
+      });
+      
+      if (result) {
+        showToast('Đã reset và Seed dữ liệu thành công!');
+        await loadData();
+      } else {
+        document.getElementById('db-status-dot').className = 'status-dot';
+        document.getElementById('db-status-text').textContent = 'Firestore Lỗi';
+      }
+    }
+
+    // Initial Load & Polling
+    loadData();
+    setInterval(loadData, 5000); // Poll database state every 5 seconds
+    lucide.createIcons();
+  </script>
+</body>
+</html>

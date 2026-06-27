@@ -5,6 +5,7 @@ import YAML from 'yamljs';
 import swaggerUi from 'swagger-ui-express';
 import apiRouter from './routes/index.js';
 import bookingRouter from './routes/booking.js';
+import driverRouter from './routes/driver.js';
 
 const app = express();
 
@@ -16,6 +17,9 @@ const swaggerDocument = YAML.load(openApiDocPath);
 app.use(cors());
 app.use(express.json());
 
+// Serve static dashboard files
+app.use('/dashboard', express.static(path.resolve(process.cwd(), 'public')));
+
 // Swagger UI Docs
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
@@ -23,6 +27,8 @@ app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 // Routes - support both with and without /api prefix
 app.use('/api/bookings', bookingRouter);
 app.use('/bookings', bookingRouter);
+app.use('/api/drivers', driverRouter);
+app.use('/drivers', driverRouter);
 app.use('/api', apiRouter);
 app.use('/', apiRouter);
 
