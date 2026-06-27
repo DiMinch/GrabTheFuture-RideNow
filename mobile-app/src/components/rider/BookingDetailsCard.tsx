@@ -23,6 +23,13 @@ export interface Booking {
   status: BookingStatusLike;
   driverId?: string;
   createdAt?: string;
+  driver?: {
+    name: string;
+    plate: string;
+    ble_major_minor?: string;
+    lat?: number;
+    lng?: number;
+  };
 }
 
 interface BookingDetailsCardProps {

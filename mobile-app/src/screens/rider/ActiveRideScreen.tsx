@@ -5,11 +5,13 @@ import {
   View,
   ActivityIndicator,
   TouchableOpacity,
+  Vibration,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../App'; // Đường dẫn có thể thay đổi tùy cấu trúc thư mục của bạn
 import * as Speech from 'expo-speech';
 import BookingDetailsCard, { Booking } from '@/components/rider/BookingDetailsCard';
+import BleHandshakeOverlay from '../../components/rider/BleHandshakeOverlay';
 import { getBookingStatusText, getNextBookingStatus, normalizeBookingStatus } from '../../utils/bookingStatus';
 import { updateBookingStatus } from '../../services/bookings';
 import { API_BASE_URL } from '../../config';
@@ -27,14 +29,111 @@ export default function ActiveRideScreen({ route, navigation }: Props): React.JS
   const [error, setError] = useState<string | null>(null);
   const [statusUpdating, setStatusUpdating] = useState<boolean>(false);
 
-  // Gọi API ngay khi màn hình vừa render xong
+  // States cho giả lập GPS/BLE (Haptic Radar + Flash Beacon + BLE Handshake)
+  const [distance, setDistance] = useState<number>(120);
+  const [showBleOverlay, setShowBleOverlay] = useState<boolean>(false);
+  const [isScreenFlashing, setIsScreenFlashing] = useState<boolean>(false);
+
+  // Gọi API ngay khi màn hình vừa render xong và thiết lập Polling
   useEffect(() => {
-    fetchBookingDetails();
+    fetchBookingDetails(true);
+
+    const pollInterval = setInterval(() => {
+      fetchBookingDetails(false); // background fetch silently
+    }, 4000);
 
     return () => {
+      clearInterval(pollInterval);
       Speech.stop(); // Cancel speech when screen is unmount
     };
   }, [ride_id]);
+
+  // Vòng lặp giả lập hành trình (Simulation Loop)
+  useEffect(() => {
+    if (!booking || normalizeBookingStatus(booking.status) !== 'ACCEPTED') {
+      setDistance(120);
+      setShowBleOverlay(false);
+      setIsScreenFlashing(false);
+      return;
+    }
+
+    // Tài xế đã nhận chuyến: Giảm khoảng cách để test flow
+    const simInterval = setInterval(() => {
+      setDistance((prev) => {
+        if (prev <= 0) {
+          clearInterval(simInterval);
+          return 0;
+        }
+        const nextDist = prev - 10;
+        return nextDist < 0 ? 0 : nextDist;
+      });
+    }, 2500);
+
+    return () => {
+      clearInterval(simInterval);
+    };
+  }, [booking?.status]);
+
+  // TTS thông báo khi tài xế tiến lại gần
+  useEffect(() => {
+    if (!booking || normalizeBookingStatus(booking.status) !== 'ACCEPTED') return;
+
+    let speechText = '';
+    
+    if (distance === 120) {
+      speechText = 'Tài xế đang cách bạn một trăm hai mươi mét. Điểm đón của bạn ở phía trước bên phải.';
+    } else if (distance === 100) {
+      speechText = 'Tài xế đang ở phía trước bên phải, cách bạn một trăm mét.';
+    } else if (distance === 80) {
+      speechText = 'Tài xế cách bạn tám mươi mét, tiếp tục di chuyển về phía điểm đón.';
+    } else if (distance === 50) {
+      speechText = 'Tài xế đang cách bạn năm mươi mét.';
+    } else if (distance === 20) {
+      speechText = 'Tài xế cách bạn hai mươi mét. Kích hoạt radar rung và nháy đèn flash để tài xế nhận diện.';
+    } else if (distance === 5) {
+      speechText = 'Tài xế đã đến gần dưới năm mét. Bắt đầu xác thực BLE Handshake.';
+      setShowBleOverlay(true);
+    }
+
+    if (speechText) {
+      void Speech.speak(speechText, { language: 'vi-VN' });
+    }
+  }, [distance, booking?.status]);
+
+  // Haptic Radar + Flash Beacon (20m -> 5m)
+  useEffect(() => {
+    if (!booking || normalizeBookingStatus(booking.status) !== 'ACCEPTED') {
+      setIsScreenFlashing(false);
+      return;
+    }
+
+    let flashTimer: ReturnType<typeof setInterval> | null = null;
+    let vibrateTimer: ReturnType<typeof setInterval> | null = null;
+
+    if (distance <= 20 && distance > 5) {
+      // Flash screen periodically
+      flashTimer = setInterval(() => {
+        setIsScreenFlashing((prev) => !prev);
+      }, 300);
+
+      // Vibration interval gets faster as driver gets closer
+      const vibrateInterval = Math.max(400, distance * 80);
+      
+      const triggerVibration = () => {
+        Vibration.vibrate(200);
+      };
+      
+      triggerVibration();
+      vibrateTimer = setInterval(triggerVibration, vibrateInterval);
+    } else {
+      setIsScreenFlashing(false);
+    }
+
+    return () => {
+      if (flashTimer) clearInterval(flashTimer);
+      if (vibrateTimer) clearInterval(vibrateTimer);
+    };
+  }, [distance, booking?.status]);
 
   const updateNextBookingStatus = async (): Promise<void> => {
     if (!booking) {
@@ -77,9 +176,41 @@ export default function ActiveRideScreen({ route, navigation }: Props): React.JS
     }
   };
 
-  const fetchBookingDetails = async () => {
+  // BLE Tap-to-Signal handler
+  const handleBleSignalTapped = async () => {
+    if (!booking) return;
     try {
-      setLoading(true);
+      const updatedBookingRes = await updateBookingStatus(API_BASE_URL, booking.id, {
+        status: 'IN_PROGRESS',
+        driverId: booking.driverId,
+      });
+
+      const updatedBooking = (updatedBookingRes as any).data || updatedBookingRes;
+      setBooking((current) =>
+        current
+          ? {
+              ...current,
+              ...updatedBooking,
+              status: updatedBooking.status,
+            }
+          : current,
+      );
+      setShowBleOverlay(false);
+      setIsScreenFlashing(false);
+
+      void Speech.speak('Xác nhận lên xe thành công. Chúc bạn có một hành trình an toàn.', {
+        language: 'vi-VN',
+      });
+    } catch (err) {
+      console.error('Error confirming BLE handshake:', err);
+    }
+  };
+
+  const fetchBookingDetails = async (showLoadingSpinner = true) => {
+    try {
+      if (showLoadingSpinner) {
+        setLoading(true);
+      }
       setError(null);
 
       // Gọi phương thức GET
@@ -102,18 +233,30 @@ export default function ActiveRideScreen({ route, navigation }: Props): React.JS
       // Parse JSON thành công (Mã 200)
       const resJson = await response.json();
       const data: Booking = resJson.data || resJson;
-      setBooking(data);
 
-      // Đọc Text-to-Speech tự động cập nhật trạng thái mới nhất cho người dùng
-      const statusMessage = normalizeBookingStatus(data.status) === 'PENDING'
-        ? 'Đã kết nối dữ liệu hành trình. Hệ thống đang tích cực tìm kiếm tài xế.'
-        : 'Cập nhật thông tin chuyến đi thành công.';
-      void Speech.speak(statusMessage, { language: 'vi-VN' });
+      setBooking((current) => {
+        if (current && normalizeBookingStatus(current.status) !== normalizeBookingStatus(data.status)) {
+          // Phát âm thanh khi trạng thái thay đổi
+          const statusMessage = `Trạng thái chuyến đi đã cập nhật sang: ${getBookingStatusText(data.status)}.`;
+          void Speech.speak(statusMessage, { language: 'vi-VN' });
+        } else if (!current && showLoadingSpinner) {
+          // Lần đầu tải trang
+          const statusMessage = normalizeBookingStatus(data.status) === 'PENDING'
+            ? 'Đã kết nối dữ liệu hành trình. Hệ thống đang tích cực tìm kiếm tài xế.'
+            : 'Cập nhật thông tin chuyến đi thành công.';
+          void Speech.speak(statusMessage, { language: 'vi-VN' });
+        }
+        return data;
+      });
 
     } catch (err: any) {
-      setError(err.message || 'Lỗi mạng');
+      if (showLoadingSpinner) {
+        setError(err.message || 'Lỗi mạng');
+      }
     } finally {
-      setLoading(false);
+      if (showLoadingSpinner) {
+        setLoading(false);
+      }
     }
   };
 
@@ -136,7 +279,7 @@ export default function ActiveRideScreen({ route, navigation }: Props): React.JS
         
         <TouchableOpacity 
           style={styles.retryButton} 
-          onPress={fetchBookingDetails}
+          onPress={() => fetchBookingDetails(true)}
           accessible
           accessibilityRole="button"
           accessibilityLabel="Thử lại"
@@ -165,6 +308,14 @@ export default function ActiveRideScreen({ route, navigation }: Props): React.JS
         Hành Trình Hiện Tại
       </Text>
 
+      {booking && normalizeBookingStatus(booking.status) === 'ACCEPTED' && (
+        <View style={styles.distanceContainer} accessible={true} accessibilityLabel={`Tài xế đang cách bạn ${distance} mét. Hướng phía trước bên phải.`}>
+          <Text style={styles.distanceLabel}>Khoảng cách tài xế:</Text>
+          <Text style={styles.distanceValue}>{distance}m</Text>
+          <Text style={styles.directionText}>Hướng: Phía trước bên phải</Text>
+        </View>
+      )}
+
       {booking && <BookingDetailsCard booking={booking} />}
 
       {booking ? (
@@ -186,6 +337,20 @@ export default function ActiveRideScreen({ route, navigation }: Props): React.JS
           </Text>
         </TouchableOpacity>
       ) : null}
+
+      {/* Flash Beacon simulation overlay */}
+      {isScreenFlashing && (
+        <View style={styles.flashOverlay} pointerEvents="none" />
+      )}
+
+      {/* BLE Handshake overlay */}
+      {showBleOverlay && booking && (
+        <BleHandshakeOverlay
+          driverName={booking.driver?.name || 'Nguyen Van Binh'}
+          licensePlate={booking.driver?.plate || '59P1-99999'}
+          onSignalTapped={handleBleSignalTapped}
+        />
+      )}
     </View>
   );
 }
@@ -278,5 +443,34 @@ const styles = StyleSheet.create({
   },
   statusButtonDisabled: {
     opacity: 0.6,
+  },
+  distanceContainer: {
+    alignItems: 'center',
+    marginVertical: 14,
+    backgroundColor: '#123A63',
+    padding: 16,
+    borderRadius: 16,
+  },
+  distanceLabel: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  distanceValue: {
+    color: '#00B0FF',
+    fontSize: 40,
+    fontWeight: 'bold',
+    marginVertical: 4,
+  },
+  directionText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  flashOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#ffffff',
+    opacity: 0.6,
+    zIndex: 998,
   },
 });
