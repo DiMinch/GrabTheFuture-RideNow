@@ -38,6 +38,7 @@ async def execute_tool(tool_name: str, args: dict, context: dict) -> dict:
         dropoff_address = args.get("dropoff_address", "Destination Address")
 
         payload = {
+            "riderId": context.get("userId", "mock-user-123"),
             "pickupLocation": {"latitude": pickup_lat, "longitude": pickup_lng},
             "dropoffLocation": {"latitude": dropoff_lat, "longitude": dropoff_lng},
             "pickupAddress": "Current Location", # Backfilled or parsed
@@ -53,11 +54,14 @@ async def execute_tool(tool_name: str, args: dict, context: dict) -> dict:
                     timeout=10
                 )
                 if response.status_code == 201:
-                    booking_data = response.json()
-                    print(f"[AI-Gateway] Booking created successfully: {booking_data['id']}")
+                    res_json = response.json()
+                    booking_data = res_json.get("data", res_json)
+                    booking_id = booking_data.get("id", "unknown-id")
+                    booking_status = booking_data.get("status", "pending")
+                    print(f"[AI-Gateway] Booking created successfully: {booking_id}")
                     return {
-                        "bookingId": booking_data["id"],
-                        "status": booking_data["status"],
+                        "bookingId": booking_id,
+                        "status": booking_status,
                         "driverEta": 5 # Mock ETA in minutes
                     }
                 else:
