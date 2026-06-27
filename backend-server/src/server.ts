@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
+import fs from 'fs';
 import path from 'path';
 import YAML from 'yamljs';
 import swaggerUi from 'swagger-ui-express';
@@ -9,9 +10,34 @@ import driverRouter from './routes/driver.js';
 
 const app = express();
 
-// Load OpenAPI Swagger Document
-const openApiDocPath = path.resolve(process.cwd(), '../docs/openapi.yaml');
-const swaggerDocument = YAML.load(openApiDocPath);
+// Load OpenAPI Swagger Document with multiple fallback paths
+let openApiDocPath = path.resolve(process.cwd(), '../docs/openapi.yaml');
+if (!fs.existsSync(openApiDocPath)) {
+  openApiDocPath = path.resolve(process.cwd(), 'docs/openapi.yaml');
+}
+if (!fs.existsSync(openApiDocPath)) {
+  openApiDocPath = path.resolve(process.cwd(), 'openapi.yaml');
+}
+
+let swaggerDocument: any;
+try {
+  if (fs.existsSync(openApiDocPath)) {
+    swaggerDocument = YAML.load(openApiDocPath);
+  } else {
+    throw new Error(`OpenAPI spec file not found at ${openApiDocPath}`);
+  }
+} catch (err) {
+  console.warn(`[RideNow] Warning: Could not load OpenAPI specification:`, err);
+  swaggerDocument = {
+    openapi: '3.0.0',
+    info: {
+      title: 'RideNow API',
+      version: '1.0.0',
+      description: 'API spec fallback (original file missing)'
+    },
+    paths: {}
+  };
+}
 
 // Middleware
 app.use(cors());
