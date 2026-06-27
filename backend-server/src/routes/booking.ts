@@ -21,7 +21,7 @@ router.post('/', async (req: Request, res: Response) => {
         })) as any[]; // Hoặc ép kiểu Driver[] từ types/index.ts
 
         // 2. Tìm tài xế tốt nhất bằng service bạn đã viết
-        const bestDriver = findBestDriver(drivers, pickupLocation);
+        const bestDriver = findBestDriver(drivers, pickupLocation) as any;
 
         if (!bestDriver) {
             return res.status(404).json({ success: false, message: 'No driver available' });
@@ -29,13 +29,25 @@ router.post('/', async (req: Request, res: Response) => {
 
         // 3. Tạo record Booking mới trong Firestore
         const newBooking: Booking = {
-            riderId,
+            riderId: riderId || 'mock-user-123',
             pickupLocation,
             dropoffLocation,
-            accessibilityMode,
+            accessibilityMode: accessibilityMode !== false,
             status: 'pending',
             driverId: bestDriver.id,
             createdAt: new Date(),
+            rider: {
+                lat: pickupLocation.latitude,
+                lng: pickupLocation.longitude,
+                signal_tapped: false
+            },
+            driver: {
+                name: bestDriver.name || 'Nguyễn Văn A',
+                plate: bestDriver.plate || '59X3-1234',
+                ble_major_minor: bestDriver.ble_major_minor || '12345-67890',
+                lat: bestDriver.latitude,
+                lng: bestDriver.longitude
+            }
         };
 
         const docRef = await getDb().collection('bookings').add(newBooking);
