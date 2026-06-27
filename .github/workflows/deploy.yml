@@ -36,12 +36,12 @@ jobs:
 
     - name: Configure Docker for GCP
       run: |
-        gcloud auth configure-docker asia-southeast-docker.pkg.dev --quiet
+        gcloud auth configure-docker asia-southeast1-docker.pkg.dev --quiet
 
     - name: Build and Push Docker Image
       run: |
         # Đảm bảo bạn đã tạo Artifact Registry Repository tên là 'ride-now' ở Singapore trước
-        IMAGE_TAG="asia-southeast-docker.pkg.dev/${{ env.PROJECT_ID }}/ride-now/${{ env.SERVICE_NAME }}:${{ github.sha }}"
+        IMAGE_TAG="asia-southeast1-docker.pkg.dev/${{ env.PROJECT_ID }}/ride-now/${{ env.SERVICE_NAME }}:${{ github.sha }}"
         docker build -t $IMAGE_TAG ./ai-gateway
         docker push $IMAGE_TAG
         echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
@@ -51,7 +51,7 @@ jobs:
       with:
         service: ${{ env.SERVICE_NAME }}
         region: ${{ env.REGION }}
-        image: asia-southeast-docker.pkg.dev/${{ env.PROJECT_ID }}/ride-now/${{ env.SERVICE_NAME }}:${{ github.sha }}
+        image: asia-southeast1-docker.pkg.dev/${{ env.PROJECT_ID }}/ride-now/${{ env.SERVICE_NAME }}:${{ github.sha }}
         flags: |
           --allow-unauthenticated
           --port=8000
