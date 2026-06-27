@@ -1,12 +1,94 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, useColorScheme } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, useColorScheme, PermissionsAndroid, Platform } from 'react-native';
+import Geolocation, {
+  type GeolocationError,
+  type GeolocationResponse,
+} from '@react-native-community/geolocation';
 import * as Speech from 'expo-speech';
+import { updateDriverLocation } from '../../services/drivers';
 
 interface DriverTrackingScreenProps {
   onConfirmPickup: () => void;
+  driverId?: string;
 }
 
-const DriverTrackingScreen: React.FC<DriverTrackingScreenProps> = ({ onConfirmPickup }) => {
+type LocationSyncStatus = 'idle' | 'requesting-permission' | 'tracking' | 'syncing' | 'synced' | 'error' | 'denied';
+
+type DriverPosition = {
+  latitude: number;
+  longitude: number;
+  bearing?: number;
+};
+
+const API_BASE_URL = 'http://localhost:5000/api';
+const DEFAULT_DRIVER_ID = 'driver-mock-1';
+const LOCATION_UPDATE_INTERVAL_MS = 10000;
+
+const locationOptions = {
+  enableHighAccuracy: true,
+  timeout: 15000,
+  maximumAge: 5000,
+  distanceFilter: 5,
+  interval: LOCATION_UPDATE_INTERVAL_MS,
+  fastestInterval: 5000,
+};
+
+async function requestLocationPermission(): Promise<boolean> {
+  if (Platform.OS === 'android') {
+    const result = await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+      {
+        title: 'Driver location permission',
+        message: 'RideNow needs your location to update riders while you are on a trip.',
+        buttonPositive: 'Allow',
+        buttonNegative: 'Deny',
+      },
+    );
+
+    return result === PermissionsAndroid.RESULTS.GRANTED;
+  }
+
+  if (Platform.OS === 'ios') {
+    return new Promise((resolve) => {
+      Geolocation.requestAuthorization(
+        () => resolve(true),
+        () => resolve(false),
+      );
+    });
+  }
+
+  return true;
+}
+
+function toDriverPosition(position: GeolocationResponse): DriverPosition {
+  const { latitude, longitude, heading } = position.coords;
+  const bearing = typeof heading === 'number' && heading >= 0 ? heading : undefined;
+
+  return {
+    latitude,
+    longitude,
+    ...(bearing !== undefined ? { bearing } : {}),
+  };
+}
+
+function getLocationErrorMessage(error: GeolocationError): string {
+  if (error.code === error.PERMISSION_DENIED) {
+    return 'Location permission denied';
+  }
+  if (error.code === error.POSITION_UNAVAILABLE) {
+    return 'Current GPS position is unavailable';
+  }
+  if (error.code === error.TIMEOUT) {
+    return 'Timed out while reading GPS position';
+  }
+
+  return error.message || 'Could not read GPS position';
+}
+
+const DriverTrackingScreen: React.FC<DriverTrackingScreenProps> = ({
+  onConfirmPickup,
+  driverId = DEFAULT_DRIVER_ID,
+}) => {
   const isDarkMode = useColorScheme() === 'dark';
   const textColor = isDarkMode ? '#FFFFFF' : '#1A1A1A';
   const subTextColor = isDarkMode ? '#CCCCCC' : '#555555';
@@ -17,6 +99,10 @@ const DriverTrackingScreen: React.FC<DriverTrackingScreenProps> = ({ onConfirmPi
   const [bleConnected, setBleConnected] = useState(false);
   const [passengerSignaled, setPassengerSignaled] = useState(false);
   const [currentAlert, setCurrentAlert] = useState<string | null>(null);
+  const [lastKnownPosition, setLastKnownPosition] = useState<DriverPosition | null>(null);
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
+  const [locationSyncStatus, setLocationSyncStatus] = useState<LocationSyncStatus>('idle');
+  const [locationError, setLocationError] = useState<string | null>(null);
 
   useEffect(() => {
     // Mock decreasing distance to test UX flow
@@ -54,6 +140,138 @@ const DriverTrackingScreen: React.FC<DriverTrackingScreenProps> = ({ onConfirmPi
     }
   }, [distance]);
 
+  useEffect(() => {
+    let isActive = true;
+    let watchId: number | null = null;
+    let updateInterval: ReturnType<typeof setInterval> | null = null;
+    let latestPosition: DriverPosition | null = null;
+    let isPosting = false;
+
+    const postLatestPosition = async (position: DriverPosition) => {
+      if (isPosting) {
+        return;
+      }
+
+      try {
+        isPosting = true;
+        setLocationSyncStatus('syncing');
+
+        await updateDriverLocation(API_BASE_URL, {
+          driverId,
+          location: {
+            latitude: position.latitude,
+            longitude: position.longitude,
+          },
+          ...(position.bearing !== undefined ? { bearing: position.bearing } : {}),
+        });
+
+        if (isActive) {
+          setLastSyncedAt(new Date());
+          setLocationError(null);
+          setLocationSyncStatus('synced');
+        }
+      } catch (error: any) {
+        if (isActive) {
+          setLocationError(error.message || 'Could not update driver location');
+          setLocationSyncStatus('error');
+        }
+      } finally {
+        isPosting = false;
+      }
+    };
+
+    const handlePosition = (position: GeolocationResponse) => {
+      latestPosition = toDriverPosition(position);
+
+      if (isActive) {
+        setLastKnownPosition(latestPosition);
+        setLocationError(null);
+        setLocationSyncStatus('tracking');
+      }
+    };
+
+    const handlePositionError = (error: GeolocationError) => {
+      if (isActive) {
+        setLocationError(getLocationErrorMessage(error));
+        setLocationSyncStatus(error.code === error.PERMISSION_DENIED ? 'denied' : 'error');
+      }
+    };
+
+    const startTracking = async () => {
+      setLocationSyncStatus('requesting-permission');
+
+      const hasPermission = await requestLocationPermission();
+      if (!isActive) {
+        return;
+      }
+
+      if (!hasPermission) {
+        setLocationSyncStatus('denied');
+        setLocationError('Location permission is required to update driver location');
+        return;
+      }
+
+      Geolocation.getCurrentPosition(
+        (position) => {
+          const nextPosition = toDriverPosition(position);
+          latestPosition = nextPosition;
+
+          if (isActive) {
+            setLastKnownPosition(nextPosition);
+          }
+
+          void postLatestPosition(nextPosition);
+        },
+        handlePositionError,
+        locationOptions,
+      );
+
+      watchId = Geolocation.watchPosition(handlePosition, handlePositionError, locationOptions);
+      updateInterval = setInterval(() => {
+        if (latestPosition) {
+          void postLatestPosition(latestPosition);
+        }
+      }, LOCATION_UPDATE_INTERVAL_MS);
+    };
+
+    void startTracking();
+
+    return () => {
+      isActive = false;
+
+      if (watchId !== null) {
+        Geolocation.clearWatch(watchId);
+      }
+
+      if (updateInterval !== null) {
+        clearInterval(updateInterval);
+      }
+    };
+  }, [driverId]);
+
+  const locationStatusText = (() => {
+    if (locationSyncStatus === 'denied') {
+      return 'PERMISSION NEEDED';
+    }
+    if (locationSyncStatus === 'error') {
+      return 'ERROR';
+    }
+    if (locationSyncStatus === 'syncing') {
+      return 'SYNCING...';
+    }
+    if (locationSyncStatus === 'synced') {
+      return 'SYNCED';
+    }
+    if (locationSyncStatus === 'tracking') {
+      return 'TRACKING';
+    }
+    if (locationSyncStatus === 'requesting-permission') {
+      return 'REQUESTING...';
+    }
+
+    return 'STARTING...';
+  })();
+
   return (
     <View style={styles.container}>
       {currentAlert && (
@@ -75,6 +293,21 @@ const DriverTrackingScreen: React.FC<DriverTrackingScreenProps> = ({ onConfirmPi
           <Text style={[styles.statusLabel, { color: textColor }]}>Speaker Alert (TTS):</Text>
           <Text style={styles.statusActive}>ON</Text>
         </View>
+
+        <View style={styles.statusRow}>
+          <Text style={[styles.statusLabel, { color: textColor }]}>GPS API Sync:</Text>
+          <Text style={locationSyncStatus === 'error' || locationSyncStatus === 'denied' ? styles.statusError : styles.statusActive}>
+            {locationStatusText}
+          </Text>
+        </View>
+
+        <Text style={[styles.locationDetail, { color: subTextColor }]}>
+          {lastKnownPosition
+            ? `${lastKnownPosition.latitude.toFixed(5)}, ${lastKnownPosition.longitude.toFixed(5)}${
+                lastSyncedAt ? ` - ${lastSyncedAt.toLocaleTimeString()}` : ''
+              }`
+            : locationError || 'Waiting for GPS position...'}
+        </Text>
         
         <View style={styles.statusRow}>
           <Text style={[styles.statusLabel, { color: textColor }]}>Detect Flash/Haptic ({'< 20m'}):</Text>
@@ -184,6 +417,18 @@ const styles = StyleSheet.create({
     color: '#9E9E9E',
     flexShrink: 0,
     marginLeft: 10,
+  },
+  statusError: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#F44336',
+    flexShrink: 0,
+    marginLeft: 10,
+  },
+  locationDetail: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginBottom: 10,
   },
   finishButton: {
     backgroundColor: '#6200EE',
