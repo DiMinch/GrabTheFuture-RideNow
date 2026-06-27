@@ -1,7 +1,7 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from app.services.gemini import GeminiLiveService
 
 class SessionInfo(BaseModel):
@@ -12,8 +12,7 @@ class SessionInfo(BaseModel):
     lang: str
     created_at: datetime
     
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 class SessionManager:
     """
@@ -34,7 +33,7 @@ class SessionManager:
             latitude=lat,
             longitude=lng,
             lang=lang,
-            created_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc)
         )
         self.active_sessions[session_id] = session_info
         print(f"[SessionManager] Registered session: {session_id} for user: {user_id}")
