@@ -1,5 +1,10 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import {
+  getBookingStatusColor,
+  getBookingStatusText,
+  type BookingStatusLike,
+} from '../../utils/bookingStatus';
 
 // Định nghĩa cấu trúc Location khớp component schema định nghĩa trong API Docs
 export interface Location {
@@ -15,7 +20,7 @@ export interface Booking {
   pickupAddress?: string;
   dropoffAddress?: string;
   accessibilityMode: boolean;
-  status: string;
+  status: BookingStatusLike;
   driverId?: string;
   createdAt?: string;
 }
@@ -25,48 +30,7 @@ interface BookingDetailsCardProps {
 }
 
 export default function BookingDetailsCard({ booking }: BookingDetailsCardProps): React.JSX.Element {
-  
-  // Hàm chuyển đổi Trạng thái từ Backend sang Tiếng Việt hiển thị & đọc Screen Reader
-  const getStatusText = (status: string) => {
-    switch (status.toUpperCase()) {
-      case 'PENDING':
-      case 'SEARCHING_FOR_DRIVER':
-        return 'Đang tìm kiếm tài xế';
-      case 'ACCEPTED':
-        return 'Tài xế đã nhận chuyến';
-      case 'ARRIVED':
-        return 'Tài xế đã đến điểm đón';
-      case 'PICKED_UP':
-        return 'Chuyến đi đã bắt đầu';
-      case 'COMPLETED':
-        return 'Chuyến đi hoàn thành';
-      case 'CANCELLED':
-        return 'Chuyến đi đã bị hủy';
-      default:
-        return status;
-    }
-  };
-
-  // Màu sắc cảnh báo trực quan tương ứng từng trạng thái
-  const getStatusColor = (status: string) => {
-    switch (status.toUpperCase()) {
-      case 'PENDING':
-      case 'SEARCHING_FOR_DRIVER':
-        return '#EAB308'; // Vàng
-      case 'ACCEPTED':
-      case 'ARRIVED':
-      case 'PICKED_UP':
-        return '#3B82F6'; // Xanh dương
-      case 'COMPLETED':
-        return '#22C55E'; // Xanh lá
-      case 'CANCELLED':
-        return '#EF4444'; // Đỏ
-      default:
-        return '#FFFFFF';
-    }
-  };
-
-  const currentStatusText = getStatusText(booking.status);
+  const currentStatusText = getBookingStatusText(booking.status);
   
   // Chuỗi thông tin tối ưu hóa cho công cụ đọc màn hình (VoiceOver / TalkBack)
   const accessibleText = `Thông tin chuyến đi. Mã số ${booking.id}. Trạng thái: ${currentStatusText}. Điểm đón: ${booking.pickupAddress || 'Chưa cập nhật địa chỉ'}. Điểm đến: ${booking.dropoffAddress || 'Chưa cập nhật địa chỉ'}. Chế độ hỗ trợ khiếm thị: ${booking.accessibilityMode ? 'Đang bật' : 'Tắt'}.`;
@@ -86,7 +50,7 @@ export default function BookingDetailsCard({ booking }: BookingDetailsCardProps)
 
       <View style={styles.row}>
         <Text style={styles.label}>Trạng thái:</Text>
-        <Text style={[styles.value, { color: getStatusColor(booking.status), fontWeight: '700' }]}>
+        <Text style={[styles.value, { color: getBookingStatusColor(booking.status), fontWeight: '700' }]}>
           {currentStatusText}
         </Text>
       </View>

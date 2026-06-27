@@ -10,6 +10,8 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../App'; // Đường dẫn có thể thay đổi tùy cấu trúc thư mục của bạn
 import * as Speech from 'expo-speech';
 import BookingDetailsCard, { Booking } from '@/components/rider/BookingDetailsCard';
+import { getBookingStatusText, getNextBookingStatus, normalizeBookingStatus } from '../../utils/bookingStatus';
+import { updateBookingStatus } from '../../services/bookings';
 
 // Khai báo kiểu Props cho màn hình này
 type Props = NativeStackScreenProps<RootStackParamList, 'ActiveRide'>;
@@ -24,6 +26,7 @@ export default function ActiveRideScreen({ route, navigation }: Props): React.JS
   const [booking, setBooking] = useState<Booking | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [statusUpdating, setStatusUpdating] = useState<boolean>(false);
 
   // Gọi API ngay khi màn hình vừa render xong
   useEffect(() => {
@@ -33,6 +36,45 @@ export default function ActiveRideScreen({ route, navigation }: Props): React.JS
       Speech.stop(); // Cancel speech when screen is unmount
     };
   }, [ride_id]);
+
+  const updateNextBookingStatus = async (): Promise<void> => {
+    if (!booking) {
+      return;
+    }
+
+    const nextStatus = getNextBookingStatus(booking.status);
+
+    if (!nextStatus) {
+      return;
+    }
+
+    try {
+      setStatusUpdating(true);
+
+      const updatedBooking = await updateBookingStatus(API_BASE_URL, booking.id, {
+        status: nextStatus,
+        driverId: booking.driverId,
+      });
+
+      setBooking((current) =>
+        current
+          ? {
+              ...current,
+              ...updatedBooking,
+              status: updatedBooking.status,
+            }
+          : current,
+      );
+
+      void Speech.speak(`Trạng thái chuyến đi đã được cập nhật sang ${getBookingStatusText(nextStatus)}.`, {
+        language: 'vi-VN',
+      });
+    } catch (err: any) {
+      setError(err.message || 'Không thể cập nhật trạng thái chuyến đi');
+    } finally {
+      setStatusUpdating(false);
+    }
+  };
 
   const fetchBookingDetails = async () => {
     try {
@@ -61,7 +103,7 @@ export default function ActiveRideScreen({ route, navigation }: Props): React.JS
       setBooking(data);
 
       // Đọc Text-to-Speech tự động cập nhật trạng thái mới nhất cho người dùng
-      const statusMessage = data.status === 'PENDING' || data.status === 'SEARCHING_FOR_DRIVER'
+      const statusMessage = normalizeBookingStatus(data.status) === 'PENDING'
         ? 'Đã kết nối dữ liệu hành trình. Hệ thống đang tích cực tìm kiếm tài xế.'
         : 'Cập nhật thông tin chuyến đi thành công.';
       void Speech.speak(statusMessage, { language: 'vi-VN' });
@@ -122,6 +164,26 @@ export default function ActiveRideScreen({ route, navigation }: Props): React.JS
       </Text>
 
       {booking && <BookingDetailsCard booking={booking} />}
+
+      {booking ? (
+        <TouchableOpacity
+          style={[styles.statusButton, (statusUpdating || getNextBookingStatus(booking.status) === null) && styles.statusButtonDisabled]}
+          onPress={updateNextBookingStatus}
+          disabled={statusUpdating || getNextBookingStatus(booking.status) === null}
+          accessible
+          accessibilityRole="button"
+          accessibilityLabel="Cập nhật trạng thái chuyến đi"
+          accessibilityHint="Chạm hai lần để gửi yêu cầu PATCH cập nhật trạng thái chuyến đi theo API."
+        >
+          <Text style={styles.buttonText}>
+            {statusUpdating
+              ? 'Đang cập nhật...'
+              : getNextBookingStatus(booking.status)
+                ? `Cập nhật sang ${getBookingStatusText(getNextBookingStatus(booking.status) as string)}`
+                : 'Trạng thái đã hoàn tất'}
+          </Text>
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 }
@@ -203,5 +265,16 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     marginTop: 4,
-  }
+  },
+  statusButton: {
+    marginTop: 20,
+    backgroundColor: '#123A63',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  statusButtonDisabled: {
+    opacity: 0.6,
+  },
 });
