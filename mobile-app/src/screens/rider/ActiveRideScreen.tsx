@@ -12,11 +12,12 @@ import * as Speech from 'expo-speech';
 import BookingDetailsCard, { Booking } from '@/components/rider/BookingDetailsCard';
 import { getBookingStatusText, getNextBookingStatus, normalizeBookingStatus } from '../../utils/bookingStatus';
 import { updateBookingStatus } from '../../services/bookings';
+import { getDriverBeaconMetadata, type DriverBeaconMetadata } from '../../services/drivers';
 
 // Khai báo kiểu Props cho màn hình này
 type Props = NativeStackScreenProps<RootStackParamList, 'ActiveRide'>;
 
-const API_BASE_URL = 'http://192.168.x.x:3000'; // Đổi lại IP của bạn
+const API_BASE_URL = 'http://10.236.53.198'; // Đổi lại IP của bạn
 
 export default function ActiveRideScreen({ route, navigation }: Props): React.JSX.Element {
   // Lấy ride_id (chính là bookingId) được truyền từ RiderHomeScreen sang
@@ -27,6 +28,9 @@ export default function ActiveRideScreen({ route, navigation }: Props): React.JS
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [statusUpdating, setStatusUpdating] = useState<boolean>(false);
+  const [beaconMetadata, setBeaconMetadata] = useState<DriverBeaconMetadata | null>(null);
+  const [beaconError, setBeaconError] = useState<string | null>(null);
+  const [beaconLoading, setBeaconLoading] = useState<boolean>(false);
 
   // Gọi API ngay khi màn hình vừa render xong
   useEffect(() => {
@@ -36,6 +40,44 @@ export default function ActiveRideScreen({ route, navigation }: Props): React.JS
       Speech.stop(); // Cancel speech when screen is unmount
     };
   }, [ride_id]);
+
+  useEffect(() => {
+    if (!booking?.driverId) {
+      setBeaconMetadata(null);
+      setBeaconError(null);
+      return;
+    }
+
+    let isActive = true;
+
+    const fetchBeaconMetadata = async (): Promise<void> => {
+      try {
+        setBeaconLoading(true);
+        setBeaconError(null);
+
+        const metadata = await getDriverBeaconMetadata(API_BASE_URL, booking.driverId as string);
+
+        if (isActive) {
+          setBeaconMetadata(metadata);
+        }
+      } catch (err: any) {
+        if (isActive) {
+          setBeaconMetadata(null);
+          setBeaconError(err.message || 'KhĂ´ng thá»ƒ táº£i thĂ´ng tin BLE beacon');
+        }
+      } finally {
+        if (isActive) {
+          setBeaconLoading(false);
+        }
+      }
+    };
+
+    void fetchBeaconMetadata();
+
+    return () => {
+      isActive = false;
+    };
+  }, [booking?.driverId]);
 
   const updateNextBookingStatus = async (): Promise<void> => {
     if (!booking) {
@@ -165,6 +207,26 @@ export default function ActiveRideScreen({ route, navigation }: Props): React.JS
 
       {booking && <BookingDetailsCard booking={booking} />}
 
+      {booking?.driverId ? (
+        <View style={styles.beaconCard}>
+          <Text style={styles.beaconTitle}>BLE Beacon</Text>
+          {beaconLoading ? (
+            <Text style={styles.beaconValue}>Äang táº£i thĂ´ng tin beacon...</Text>
+          ) : beaconMetadata ? (
+            <>
+              <Text style={styles.beaconLabel}>Driver ID</Text>
+              <Text style={styles.beaconValue}>{beaconMetadata.driverId}</Text>
+              <Text style={styles.beaconLabel}>UUID</Text>
+              <Text style={styles.beaconValue}>{beaconMetadata.uuid}</Text>
+              <Text style={styles.beaconLabel}>Major / Minor</Text>
+              <Text style={styles.beaconValue}>{beaconMetadata.major} / {beaconMetadata.minor}</Text>
+            </>
+          ) : (
+            <Text style={styles.beaconError}>{beaconError || 'ChÆ°a cĂ³ thĂ´ng tin BLE beacon'}</Text>
+          )}
+        </View>
+      ) : null}
+
       {booking ? (
         <TouchableOpacity
           style={[styles.statusButton, (statusUpdating || getNextBookingStatus(booking.status) === null) && styles.statusButtonDisabled]}
@@ -276,5 +338,35 @@ const styles = StyleSheet.create({
   },
   statusButtonDisabled: {
     opacity: 0.6,
+  },
+  beaconCard: {
+    backgroundColor: '#0F2E52',
+    padding: 16,
+    borderRadius: 8,
+    marginTop: 16,
+  },
+  beaconTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 10,
+  },
+  beaconLabel: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 8,
+    textTransform: 'uppercase',
+  },
+  beaconValue: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 2,
+  },
+  beaconError: {
+    color: '#ffb4b4',
+    fontSize: 14,
+    lineHeight: 20,
   },
 });

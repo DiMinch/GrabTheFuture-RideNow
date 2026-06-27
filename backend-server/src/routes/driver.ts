@@ -74,6 +74,40 @@ router.put('/:id', async (req: Request, res: Response) => {
     }
 });
 
+// 4. Get driver's BLE beacon metadata
+router.get('/:driverId/beacon', async (req: Request, res: Response) => {
+    try {
+        const { driverId } = req.params;
+        const driverDoc = await getDb().collection('drivers').doc(driverId).get();
+
+        if (!driverDoc.exists) {
+            return res.status(404).json({ success: false, message: 'Beacon info not found for driver' });
+        }
+
+        const driverData = driverDoc.data() || {};
+        const beaconValue = typeof driverData.ble_major_minor === 'string'
+            ? driverData.ble_major_minor
+            : '';
+        const [uuid, majorValue, minorValue] = beaconValue.split(':');
+        const major = Number(majorValue);
+        const minor = Number(minorValue);
+
+        if (!uuid || !Number.isInteger(major) || !Number.isInteger(minor)) {
+            return res.status(404).json({ success: false, message: 'Beacon info not found for driver' });
+        }
+
+        return res.status(200).json({
+            driverId,
+            uuid,
+            major,
+            minor
+        });
+    } catch (error) {
+        console.error('Error fetching driver beacon:', error);
+        return res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+});
+
 // 4. Delete a driver
 router.delete('/:id', async (req: Request, res: Response) => {
     try {
