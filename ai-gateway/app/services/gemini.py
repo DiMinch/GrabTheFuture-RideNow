@@ -2,6 +2,7 @@ import os
 import asyncio
 import websockets
 import json
+import base64
 from app.services.tool_executor import execute_tool
 from app.core.prompts import get_system_instruction
 
@@ -99,7 +100,8 @@ class GeminiLiveService:
                         {"text": system_instruction}
                     ]
                 },
-                "tools": tools
+                "tools": tools,
+                "outputAudioTranscription": {}
             }
         }
 
@@ -127,18 +129,37 @@ class GeminiLiveService:
                         
                         # Stop loop if end of stream sentinel is received
                         if chunk is None or chunk == "END":
+                            # Inject 0.6 seconds of silence (3 chunks of 0.2s) to trigger VAD on Gemini side
+                            print("[Gemini] Client finished speaking. Injecting silence chunks to trigger VAD...")
+                            silence_data = base64.b64encode(b'\x00' * 6400).decode("utf-8")
+                            for _ in range(3):
+                                silence_payload = {
+                                    "realtimeInput": {
+                                        "audio": {
+                                            "mimeType": "audio/pcm;rate=16000",
+                                            "data": silence_data
+                                        }
+                                    }
+                                }
+                                await gemini_ws.send(json.dumps(silence_payload))
+                                await asyncio.sleep(0.2)
+
+                            # Signal Gemini that the user has finished speaking
+                            await gemini_ws.send(json.dumps({
+                                "clientContent": {
+                                    "turnComplete": True
+                                }
+                            }))
                             incoming_audio_queue.task_done()
                             break
                         
                         # Pack into Gemini Live API payload
                         payload = {
                             "realtimeInput": {
-                                "mediaChunks": [
-                                    {
-                                        "mimeType": "audio/pcm;rate=16000",
-                                        "data": chunk # Base64 encoded PCM 16kHz audio
-                                    }
-                                ]
+                                "audio": {
+                                    "mimeType": "audio/pcm;rate=16000",
+                                    "data": chunk # Base64 encoded PCM 16kHz audio
+                                }
                             }
                         }
                         await gemini_ws.send(json.dumps(payload))
@@ -152,11 +173,21 @@ class GeminiLiveService:
                 try:
                     async for response in gemini_ws:
                         data = json.loads(response)
+                        # Print raw message keys for debugging
+                        print(f"[Gemini -> Gateway] Received message with keys: {list(data.keys())}")
                         
                         # 1. Process standard audio/text responses
                         if "serverContent" in data:
-                            parts = data["serverContent"].get("modelTurn", {}).get("parts", [])
+                            model_turn = data["serverContent"].get("modelTurn", {})
+                            parts = model_turn.get("parts", [])
                             for part in parts:
+                                if "text" in part:
+                                    text_val = part.get("text")
+                                    print(f"[Gemini] Text transcript: {text_val}")
+                                    await outgoing_payload_queue.put({
+                                        "type": "text",
+                                        "text": text_val
+                                    })
                                 if "inlineData" in part:
                                     audio_base64 = part["inlineData"].get("data")
                                     if audio_base64:

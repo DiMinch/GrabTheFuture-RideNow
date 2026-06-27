@@ -17,8 +17,11 @@ async def execute_tool(tool_name: str, args: dict, context: dict) -> dict:
         if not address:
             return {"error": "No address provided"}
         
-        # Geocode using Nominatim
-        result = geocoder.geocode(address)
+        # Geocode using Nominatim with context coordinates and language if available
+        latitude = context.get("latitude")
+        longitude = context.get("longitude")
+        lang = context.get("lang")
+        result = geocoder.geocode(address, latitude, longitude, lang)
         if result:
             print(f"[AI-Gateway] Geocode success: {result['display_name']} -> ({result['lat']}, {result['lng']})")
             return result
