@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-2.0-flash-exp"
     BACKEND_SERVER_URL: str = "http://localhost:5000/api"
+    USE_FALLBACK_AGENT: bool = False
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -15,3 +16,4 @@ class Settings(BaseSettings):
     )
 
 settings = Settings()
+
