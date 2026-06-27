@@ -229,7 +229,8 @@ export default function RiderHomeScreen({ navigation }: RiderHomeScreenProps): R
           // Nhận response thành công
           if (isMountedRef.current) {
             setPhase('BOOKED');
-            navigation.navigate('ActiveRide', { ride_id: bookingResponse.id });
+            const bookingId = bookingResponse.data?.id || bookingResponse.id;
+            navigation.navigate('ActiveRide', { ride_id: bookingId });
           }
 
         } catch (error: any) {

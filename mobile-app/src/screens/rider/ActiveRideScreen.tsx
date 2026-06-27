@@ -50,10 +50,12 @@ export default function ActiveRideScreen({ route, navigation }: Props): React.JS
     try {
       setStatusUpdating(true);
 
-      const updatedBooking = await updateBookingStatus(API_BASE_URL, booking.id, {
+      const updatedBookingRes = await updateBookingStatus(API_BASE_URL, booking.id, {
         status: nextStatus,
         driverId: booking.driverId,
       });
+
+      const updatedBooking = (updatedBookingRes as any).data || updatedBookingRes;
 
       setBooking((current) =>
         current
@@ -98,7 +100,8 @@ export default function ActiveRideScreen({ route, navigation }: Props): React.JS
       }
 
       // Parse JSON thành công (Mã 200)
-      const data: Booking = await response.json();
+      const resJson = await response.json();
+      const data: Booking = resJson.data || resJson;
       setBooking(data);
 
       // Đọc Text-to-Speech tự động cập nhật trạng thái mới nhất cho người dùng
