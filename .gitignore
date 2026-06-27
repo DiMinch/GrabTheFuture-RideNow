@@ -48,3 +48,6 @@ android/build/
 # OS files
 .DS_Store
 Thumbs.db
+
+#Audio files
+*.wav
