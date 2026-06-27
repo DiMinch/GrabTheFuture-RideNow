@@ -67,3 +67,40 @@ def test_get_country_code_by_lang():
     assert geocoder._get_country_code_by_lang("th") == "th"
     assert geocoder._get_country_code_by_lang("en_US") is None
     assert geocoder._get_country_code_by_lang(None) is None
+
+def test_normalize_vietnam_address_no_key():
+    """Đảm bảo không gọi GeoVina API nếu không cấu hình GEOVINA_API_KEY."""
+    from app.core.config import settings
+    geocoder = NominatimGeocoder()
+    
+    with patch.object(settings, "GEOVINA_API_KEY", ""):
+        with patch("requests.post") as mock_post:
+            res = geocoder.normalize_vietnam_address("Phường 5, Quận 3, TP.HCM")
+            assert res == "Phường 5, Quận 3, TP.HCM"
+            mock_post.assert_not_called()
+
+def test_normalize_vietnam_address_success():
+    """Đảm bảo gọi GeoVina API và chuyển đổi đúng địa chỉ cũ sang mới."""
+    from app.core.config import settings
+    geocoder = NominatimGeocoder()
+    
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "status": "success",
+        "data": {
+            "full_old_address": "Phường 5, Quận 3, TP.HCM",
+            "full_new_address": "Phường Võ Thị Sáu, Quận 3, Thành phố Hồ Chí Minh"
+        }
+    }
+    
+    with patch.object(settings, "GEOVINA_API_KEY", "mock_key"):
+        with patch("requests.post", return_value=mock_response) as mock_post:
+            res = geocoder.normalize_vietnam_address("Phường 5, Quận 3, TP.HCM")
+            assert res == "Phường Võ Thị Sáu, Quận 3, Thành phố Hồ Chí Minh"
+            mock_post.assert_called_once_with(
+                "https://geovina.io.vn/api/parse",
+                json={"address": "Phường 5, Quận 3, TP.HCM"},
+                headers={"X-Api-Key": "mock_key", "Content-Type": "application/json"},
+                timeout=5
+            )

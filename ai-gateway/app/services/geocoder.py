@@ -151,6 +151,38 @@ class NominatimGeocoder:
             print(f"[Geocoder] Reverse geocoding exception: {e}")
         return None
 
+    def normalize_vietnam_address(self, address: str) -> str:
+        # Lazy import to avoid potential circular dependencies
+        from app.core.config import settings
+
+        api_key = getattr(settings, "GEOVINA_API_KEY", "")
+        if not api_key:
+            return address
+
+        url = "https://geovina.io.vn/api/parse"
+        headers = {
+            "X-Api-Key": api_key,
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "address": address
+        }
+        try:
+            print(f"[Geocoder] Querying GeoVina API to normalize: '{address}'")
+            response = requests.post(url, json=payload, headers=headers, timeout=5)
+            if response.status_code == 200:
+                response_data = response.json()
+                data = response_data.get("data", response_data) if isinstance(response_data, dict) else {}
+                full_new_address = data.get("full_new_address")
+                if full_new_address:
+                    print(f"[Geocoder] GeoVina successfully normalized address to new standard: '{full_new_address}'")
+                    return full_new_address
+            else:
+                print(f"[Geocoder] GeoVina API returned status code {response.status_code}: {response.text}")
+        except Exception as e:
+            print(f"[Geocoder] Exception during GeoVina address normalization: {e}")
+        return address
+
     def geocode(
         self, 
         address: str, 
@@ -201,7 +233,12 @@ class NominatimGeocoder:
         if not country_code:
             country_code = "vn"
             
+        # If the target country is Vietnam, run address normalization via GeoVina API (handling merged addresses)
+        if country_code == "vn":
+            address = self.normalize_vietnam_address(address)
+            
         params["countrycodes"] = country_code
+        params["q"] = address
         
         try:
             response = requests.get(self.base_url, params=params, headers=self.headers, timeout=10)
