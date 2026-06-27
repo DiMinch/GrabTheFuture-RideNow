@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import * as Speech from 'expo-speech';
+import { AiStreamClient, type AiStreamIncomingMessage } from '../../services/aiStream';
 
 export type RiderStackParamList = {
   RiderHome: undefined;
@@ -22,6 +23,11 @@ type RiderHomeScreenProps = {
 };
 
 type VoicePhase = 'IDLE' | 'LISTENING' | 'PROCESSING' | 'BOOKED';
+type AiStreamStatus = 'idle' | 'connecting' | 'connected' | 'closed' | 'error';
+
+type CreateBookingActionResult = {
+  bookingId?: string;
+};
 
 const VOICE_PROMPTS = {
   idle: 'Ứng dụng đặt xe Blind Beacon. Chạm vào màn hình để ra lệnh giọng nói.',
@@ -29,9 +35,12 @@ const VOICE_PROMPTS = {
 };
 
 const BOOKING_DESTINATION = 'Bến xe Miền Đông Mới';
+const RIDER_ID = 'mock-user-123';
+const RIDER_LOCATION = { latitude: 10.762622, longitude: 106.660172 };
 
 // Định nghĩa Base URL của Backend (nên đưa vào file .env trong thực tế)
 const API_BASE_URL = 'http://localhost:3000'; // Thay bằng IP thật của backend
+const AI_GATEWAY_WS_URL = 'ws://localhost:8000/api/ai/stream';
 
 // Cấu trúc dữ liệu gửi đi (Request Body) theo chuẩn OpenAPI
 interface BookingRequest {
@@ -86,8 +95,10 @@ async function createBooking(payload: BookingRequest) {
 
 export default function RiderHomeScreen({ navigation }: RiderHomeScreenProps): React.JSX.Element {
   const [phase, setPhase] = useState<VoicePhase>('IDLE');
+  const [aiStreamStatus, setAiStreamStatus] = useState<AiStreamStatus>('idle');
   const isMountedRef = useRef(true);
   const isBusyRef = useRef(false);
+  const aiStreamRef = useRef<AiStreamClient | null>(null);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -95,9 +106,87 @@ export default function RiderHomeScreen({ navigation }: RiderHomeScreenProps): R
 
     return () => {
       isMountedRef.current = false;
+      aiStreamRef.current?.close();
       Speech.stop();
     };
   }, []);
+
+  const handleAiStreamMessage = useCallback(
+    (message: AiStreamIncomingMessage) => {
+      if (message.type === 'error') {
+        setAiStreamStatus('error');
+        return;
+      }
+
+      if (message.type === 'text' && typeof message.text === 'string') {
+        void speakAsync(message.text);
+        return;
+      }
+
+      if (message.type === 'fallback_response' && typeof message.text_response === 'string') {
+        void speakAsync(message.text_response);
+        return;
+      }
+
+      if (message.type === 'action_result' && message.tool === 'create_booking') {
+        const result = message.result as CreateBookingActionResult | undefined;
+        const bookingId = result?.bookingId;
+
+        if (bookingId && isMountedRef.current) {
+          setPhase('BOOKED');
+          aiStreamRef.current?.close();
+          navigation.navigate('ActiveRide', { ride_id: bookingId });
+        }
+      }
+    },
+    [navigation],
+  );
+
+  const startAiStream = useCallback(() => {
+    const sessionId = `sess_${RIDER_ID}_${Date.now()}`;
+
+    aiStreamRef.current?.close();
+    setAiStreamStatus('connecting');
+
+    const aiStream = new AiStreamClient(
+      AI_GATEWAY_WS_URL,
+      {
+        sessionId,
+        lat: RIDER_LOCATION.latitude,
+        lng: RIDER_LOCATION.longitude,
+        userId: RIDER_ID,
+        lang: 'vi',
+      },
+      {
+        onOpen: () => {
+          if (!isMountedRef.current) {
+            return;
+          }
+
+          setAiStreamStatus('connected');
+          aiStream.sendSessionContext({
+            latitude: RIDER_LOCATION.latitude,
+            longitude: RIDER_LOCATION.longitude,
+            lang: 'vi',
+          });
+        },
+        onMessage: handleAiStreamMessage,
+        onError: () => {
+          if (isMountedRef.current) {
+            setAiStreamStatus('error');
+          }
+        },
+        onClose: () => {
+          if (isMountedRef.current) {
+            setAiStreamStatus((current) => (current === 'error' ? current : 'closed'));
+          }
+        },
+      },
+    );
+
+    aiStreamRef.current = aiStream;
+    aiStream.connect();
+  }, [handleAiStreamMessage]);
 
   const handleTap = useCallback(
     async (_event: GestureResponderEvent) => {
@@ -111,6 +200,7 @@ export default function RiderHomeScreen({ navigation }: RiderHomeScreenProps): R
 
         try {
           await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          startAiStream();
           
           // SỬA Ở ĐÂY: Thay mockPost bằng delay để giả lập khởi động ghi âm giọng nói
           await delay(500); 
@@ -127,11 +217,12 @@ export default function RiderHomeScreen({ navigation }: RiderHomeScreenProps): R
         setPhase('PROCESSING');
 
         try {
+          aiStreamRef.current?.close();
           await speakAsync(VOICE_PROMPTS.processing);
           
           // Gọi API backend thật
           const bookingResponse = await createBooking({
-            pickupLocation: { latitude: 10.762622, longitude: 106.660172 },
+            pickupLocation: RIDER_LOCATION,
             dropoffLocation: { latitude: 10.864319, longitude: 106.804961 },
             pickupAddress: "Vị trí hiện tại của bạn",
             dropoffAddress: BOOKING_DESTINATION,
@@ -156,7 +247,7 @@ export default function RiderHomeScreen({ navigation }: RiderHomeScreenProps): R
         }
       }
     },
-    [navigation, phase],
+    [navigation, phase, startAiStream],
   );
 
   const accessibilityLabel =
@@ -202,7 +293,7 @@ export default function RiderHomeScreen({ navigation }: RiderHomeScreenProps): R
         {phase === 'IDLE'
           ? 'TTS sẽ đọc hướng dẫn ngay khi màn hình mở.'
           : phase === 'LISTENING'
-            ? 'Micro ảo đang mở. Chạm thêm lần nữa để gửi lệnh.'
+            ? `Micro ảo đang mở. AI stream: ${aiStreamStatus}. Chạm thêm lần nữa để gửi lệnh.`
             : phase === 'PROCESSING'
               ? 'Hệ thống đang gọi API đặt xe...'
               : 'Mở màn hình điều hướng hành trình.'}

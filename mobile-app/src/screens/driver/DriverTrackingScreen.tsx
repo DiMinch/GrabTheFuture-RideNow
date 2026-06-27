@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, useColorScheme, PermissionsAndroid, Platform } from 'react-native';
-import Geolocation, {
-  type GeolocationError,
-  type GeolocationResponse,
-} from '@react-native-community/geolocation';
+import { View, Text, StyleSheet, TouchableOpacity, useColorScheme } from 'react-native';
+import * as Location from 'expo-location';
 import * as Speech from 'expo-speech';
 import { updateDriverLocation } from '../../services/drivers';
 
@@ -24,43 +21,18 @@ const API_BASE_URL = 'http://localhost:5000/api';
 const DEFAULT_DRIVER_ID = 'driver-mock-1';
 const LOCATION_UPDATE_INTERVAL_MS = 10000;
 
-const locationOptions = {
-  enableHighAccuracy: true,
-  timeout: 15000,
-  maximumAge: 5000,
-  distanceFilter: 5,
-  interval: LOCATION_UPDATE_INTERVAL_MS,
-  fastestInterval: 5000,
+const locationOptions: Location.LocationOptions = {
+  accuracy: Location.Accuracy.High,
+  timeInterval: LOCATION_UPDATE_INTERVAL_MS,
+  distanceInterval: 5,
 };
 
 async function requestLocationPermission(): Promise<boolean> {
-  if (Platform.OS === 'android') {
-    const result = await PermissionsAndroid.request(
-      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-      {
-        title: 'Driver location permission',
-        message: 'RideNow needs your location to update riders while you are on a trip.',
-        buttonPositive: 'Allow',
-        buttonNegative: 'Deny',
-      },
-    );
-
-    return result === PermissionsAndroid.RESULTS.GRANTED;
-  }
-
-  if (Platform.OS === 'ios') {
-    return new Promise((resolve) => {
-      Geolocation.requestAuthorization(
-        () => resolve(true),
-        () => resolve(false),
-      );
-    });
-  }
-
-  return true;
+  const permission = await Location.requestForegroundPermissionsAsync();
+  return permission.granted;
 }
 
-function toDriverPosition(position: GeolocationResponse): DriverPosition {
+function toDriverPosition(position: Location.LocationObject): DriverPosition {
   const { latitude, longitude, heading } = position.coords;
   const bearing = typeof heading === 'number' && heading >= 0 ? heading : undefined;
 
@@ -71,18 +43,16 @@ function toDriverPosition(position: GeolocationResponse): DriverPosition {
   };
 }
 
-function getLocationErrorMessage(error: GeolocationError): string {
-  if (error.code === error.PERMISSION_DENIED) {
-    return 'Location permission denied';
-  }
-  if (error.code === error.POSITION_UNAVAILABLE) {
-    return 'Current GPS position is unavailable';
-  }
-  if (error.code === error.TIMEOUT) {
-    return 'Timed out while reading GPS position';
+function getLocationErrorMessage(error: unknown): string {
+  if (typeof error === 'string') {
+    return error;
   }
 
-  return error.message || 'Could not read GPS position';
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return 'Could not read GPS position';
 }
 
 const DriverTrackingScreen: React.FC<DriverTrackingScreenProps> = ({
@@ -142,7 +112,7 @@ const DriverTrackingScreen: React.FC<DriverTrackingScreenProps> = ({
 
   useEffect(() => {
     let isActive = true;
-    let watchId: number | null = null;
+    let locationSubscription: Location.LocationSubscription | null = null;
     let updateInterval: ReturnType<typeof setInterval> | null = null;
     let latestPosition: DriverPosition | null = null;
     let isPosting = false;
@@ -180,7 +150,7 @@ const DriverTrackingScreen: React.FC<DriverTrackingScreenProps> = ({
       }
     };
 
-    const handlePosition = (position: GeolocationResponse) => {
+    const handlePosition = (position: Location.LocationObject) => {
       latestPosition = toDriverPosition(position);
 
       if (isActive) {
@@ -190,48 +160,59 @@ const DriverTrackingScreen: React.FC<DriverTrackingScreenProps> = ({
       }
     };
 
-    const handlePositionError = (error: GeolocationError) => {
+    const handlePositionError = (error: string) => {
       if (isActive) {
         setLocationError(getLocationErrorMessage(error));
-        setLocationSyncStatus(error.code === error.PERMISSION_DENIED ? 'denied' : 'error');
+        setLocationSyncStatus('error');
       }
     };
 
     const startTracking = async () => {
-      setLocationSyncStatus('requesting-permission');
+      try {
+        setLocationSyncStatus('requesting-permission');
 
-      const hasPermission = await requestLocationPermission();
-      if (!isActive) {
-        return;
-      }
-
-      if (!hasPermission) {
-        setLocationSyncStatus('denied');
-        setLocationError('Location permission is required to update driver location');
-        return;
-      }
-
-      Geolocation.getCurrentPosition(
-        (position) => {
-          const nextPosition = toDriverPosition(position);
-          latestPosition = nextPosition;
-
-          if (isActive) {
-            setLastKnownPosition(nextPosition);
-          }
-
-          void postLatestPosition(nextPosition);
-        },
-        handlePositionError,
-        locationOptions,
-      );
-
-      watchId = Geolocation.watchPosition(handlePosition, handlePositionError, locationOptions);
-      updateInterval = setInterval(() => {
-        if (latestPosition) {
-          void postLatestPosition(latestPosition);
+        const hasPermission = await requestLocationPermission();
+        if (!isActive) {
+          return;
         }
-      }, LOCATION_UPDATE_INTERVAL_MS);
+
+        if (!hasPermission) {
+          setLocationSyncStatus('denied');
+          setLocationError('Location permission is required to update driver location');
+          return;
+        }
+
+        const currentPosition = await Location.getCurrentPositionAsync(locationOptions);
+        const nextPosition = toDriverPosition(currentPosition);
+        latestPosition = nextPosition;
+
+        if (isActive) {
+          setLastKnownPosition(nextPosition);
+          void postLatestPosition(nextPosition);
+        }
+
+        locationSubscription = await Location.watchPositionAsync(
+          locationOptions,
+          handlePosition,
+          handlePositionError,
+        );
+
+        if (!isActive) {
+          locationSubscription.remove();
+          return;
+        }
+
+        updateInterval = setInterval(() => {
+          if (latestPosition) {
+            void postLatestPosition(latestPosition);
+          }
+        }, LOCATION_UPDATE_INTERVAL_MS);
+      } catch (error: unknown) {
+        if (isActive) {
+          setLocationError(getLocationErrorMessage(error));
+          setLocationSyncStatus('error');
+        }
+      }
     };
 
     void startTracking();
@@ -239,9 +220,7 @@ const DriverTrackingScreen: React.FC<DriverTrackingScreenProps> = ({
     return () => {
       isActive = false;
 
-      if (watchId !== null) {
-        Geolocation.clearWatch(watchId);
-      }
+      locationSubscription?.remove();
 
       if (updateInterval !== null) {
         clearInterval(updateInterval);
