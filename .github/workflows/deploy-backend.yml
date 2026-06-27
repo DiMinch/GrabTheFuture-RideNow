@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - dev(be)-minh
+      - dev(fe)-minh
     paths:
       - 'backend-server/**'
       - 'docs/openapi.yaml'

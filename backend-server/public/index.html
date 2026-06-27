@@ -340,45 +340,55 @@
         return;
       }
 
-      container.innerHTML = drivers.map(d => `
+      container.innerHTML = drivers.map(d => {
+        const name = d.name || 'Tài xế Mock';
+        const plate = d.plate || 'Chưa đăng ký';
+        const rating = typeof d.rating === 'number' ? d.rating.toFixed(1) : '5.0';
+        const isBusy = !!d.busy;
+        const isAccFriendly = !!d.accessibilityFriendly;
+        const ble = d.ble_major_minor || 'N/A';
+        const lat = typeof d.latitude === 'number' ? d.latitude.toFixed(5) : '0.00000';
+        const lng = typeof d.longitude === 'number' ? d.longitude.toFixed(5) : '0.00000';
+
+        return `
         <div class="driver-card">
           <div class="driver-card-header">
             <div class="driver-info">
-              <h3>${d.name}</h3>
-              <p>${d.plate}</p>
+              <h3>${name}</h3>
+              <p>${plate}</p>
             </div>
             <div class="driver-rating">
               <i data-lucide="star" style="fill:var(--warning);width:14px;height:14px"></i>
-              <span>${d.rating.toFixed(1)}</span>
+              <span>${rating}</span>
             </div>
           </div>
           <div class="driver-details">
             <div class="driver-detail-row">
               <span>Trạng thái:</span>
               <span>
-                <span class="badge ${d.busy ? 'badge-danger' : 'badge-success'}">
-                  ${d.busy ? 'Đang bận' : 'Rảnh'}
+                <span class="badge ${isBusy ? 'badge-danger' : 'badge-success'}">
+                  ${isBusy ? 'Đang bận' : 'Rảnh'}
                 </span>
               </span>
             </div>
             <div class="driver-detail-row">
               <span>Hỗ trợ khiếm thị:</span>
-              <span>${d.accessibilityFriendly ? 'Có ✓' : 'Không ✗'}</span>
+              <span>${isAccFriendly ? 'Có ✓' : 'Không ✗'}</span>
             </div>
             <div class="driver-detail-row">
               <span>BLE Beacon:</span>
-              <span>${d.ble_major_minor || '1:100'}</span>
+              <span>${ble}</span>
             </div>
             <div class="driver-detail-row">
               <span>Tọa độ GPS:</span>
-              <span>${Number(d.latitude).toFixed(5)}, ${Number(d.longitude).toFixed(5)}</span>
+              <span>${lat}, ${lng}</span>
             </div>
           </div>
           <div class="driver-actions">
-            <button class="btn btn-secondary" onclick="toggleDriverBusy('${d.id}', ${d.busy})">
-              ${d.busy ? 'Mở rảnh' : 'Khóa bận'}
+            <button class="btn btn-secondary" onclick="toggleDriverBusy('${d.id}', ${isBusy})">
+              ${isBusy ? 'Mở rảnh' : 'Khóa bận'}
             </button>
-            <button class="btn btn-secondary" onclick="toggleDriverAccessibility('${d.id}', ${d.accessibilityFriendly})">
+            <button class="btn btn-secondary" onclick="toggleDriverAccessibility('${d.id}', ${isAccFriendly})">
               Toggle Hỗ trợ
             </button>
             <button class="btn btn-danger" style="padding:6px" onclick="deleteDriver('${d.id}')">
@@ -386,7 +396,8 @@
             </button>
           </div>
         </div>
-      `).join('');
+        `;
+      }).join('');
       lucide.createIcons();
     }
 
@@ -404,15 +415,19 @@
           </div>
         `;
       } else {
-        listEl.innerHTML = activeBookings.map(b => `
+        listEl.innerHTML = activeBookings.map(b => {
+          const pickupLat = (b.pickupLocation && typeof b.pickupLocation.latitude === 'number') ? b.pickupLocation.latitude.toFixed(5) : '0.00000';
+          const pickupLng = (b.pickupLocation && typeof b.pickupLocation.longitude === 'number') ? b.pickupLocation.longitude.toFixed(5) : '0.00000';
+          const dropoffLat = (b.dropoffLocation && typeof b.dropoffLocation.latitude === 'number') ? b.dropoffLocation.latitude.toFixed(5) : '0.00000';
+          return `
           <div style="background:var(--bg-tertiary);border:1px solid var(--border-glass);padding:16px;border-radius:var(--radius-md);margin-bottom:12px">
             <div style="display:flex;justify-content:space-between;margin-bottom:8px">
               <span style="font-weight:600;font-size:14px;color:var(--primary)">ID: ${b.id.substring(0,8)}...</span>
               <span class="badge ${getStatusBadgeClass(b.status)}">${b.status}</span>
             </div>
             <div style="font-size:13px;color:var(--text-secondary);display:flex;flex-direction:column;gap:4px">
-              <p>📍 Đón: ${b.pickupLocation.latitude.toFixed(5)}, ${b.pickupLocation.longitude.toFixed(5)}</p>
-              <p>🏁 Đến: ${b.dropoffAddress || b.dropoffLocation.latitude.toFixed(5)}</p>
+              <p>📍 Đón: ${pickupLat}, ${pickupLng}</p>
+              <p>🏁 Đến: ${b.dropoffAddress || dropoffLat}</p>
               <p>🚗 Tài xế: ${b.driver?.name || 'Chưa nhận'}</p>
             </div>
             <div style="display:flex;gap:8px;margin-top:12px;border-top:1px solid var(--border-glass);padding-top:8px">
@@ -422,7 +437,8 @@
               <button class="btn btn-danger" style="padding:4px 8px;font-size:11px" onclick="cancelBooking('${b.id}')">Hủy</button>
             </div>
           </div>
-        `).join('');
+          `;
+        }).join('');
       }
 
       // 2. Full Table List in Bookings Tab
@@ -432,12 +448,15 @@
       } else {
         tableBody.innerHTML = bookings.map(b => {
           const dateStr = b.createdAt ? (b.createdAt.toDate ? b.createdAt.toDate().toLocaleTimeString() : (b.createdAt._seconds ? new Date(b.createdAt._seconds * 1000).toLocaleTimeString() : new Date(b.createdAt).toLocaleTimeString())) : '---';
+          const pickupLat = (b.pickupLocation && typeof b.pickupLocation.latitude === 'number') ? b.pickupLocation.latitude.toFixed(5) : '0.00000';
+          const pickupLng = (b.pickupLocation && typeof b.pickupLocation.longitude === 'number') ? b.pickupLocation.longitude.toFixed(5) : '0.00000';
+          const dropoffLat = (b.dropoffLocation && typeof b.dropoffLocation.latitude === 'number') ? b.dropoffLocation.latitude.toFixed(5) : '0.00000';
           return `
             <tr>
               <td style="font-family:monospace;color:var(--primary)">${b.id.substring(0,10)}...</td>
               <td>${b.riderId || 'rider_test'}</td>
-              <td>${b.pickupLocation.latitude.toFixed(5)}, ${b.pickupLocation.longitude.toFixed(5)}</td>
-              <td title="${b.dropoffAddress || ''}">${b.dropoffAddress ? (b.dropoffAddress.length > 25 ? b.dropoffAddress.substring(0,25)+'...' : b.dropoffAddress) : b.dropoffLocation.latitude.toFixed(5)}</td>
+              <td>${pickupLat}, ${pickupLng}</td>
+              <td title="${b.dropoffAddress || ''}">${b.dropoffAddress ? (b.dropoffAddress.length > 25 ? b.dropoffAddress.substring(0,25)+'...' : b.dropoffAddress) : dropoffLat}</td>
               <td>${b.driver?.name || 'Chưa nhận'}</td>
               <td><span class="badge ${getStatusBadgeClass(b.status)}">${b.status}</span></td>
               <td>${dateStr}</td>
@@ -570,10 +589,15 @@
       const marker = e.currentTarget.querySelector('.marker-dot') || e.currentTarget;
       const rect = marker.getBoundingClientRect();
       
+      const name = driver.name || 'Tài xế Mock';
+      const plate = driver.plate || 'Chưa đăng ký';
+      const lat = typeof driver.latitude === 'number' ? driver.latitude.toFixed(5) : '0.00000';
+      const lng = typeof driver.longitude === 'number' ? driver.longitude.toFixed(5) : '0.00000';
+      
       tooltip.innerHTML = `
-        <strong>${driver.name}</strong> (${driver.plate})<br/>
+        <strong>${name}</strong> (${plate})<br/>
         Trạng thái: ${driver.busy ? 'Bận' : 'Rảnh'}<br/>
-        GPS: ${driver.latitude.toFixed(5)}, ${driver.longitude.toFixed(5)}<br/>
+        GPS: ${lat}, ${lng}<br/>
         Hỗ trợ: ${driver.accessibilityFriendly ? 'Có' : 'Không'}
       `;
       
