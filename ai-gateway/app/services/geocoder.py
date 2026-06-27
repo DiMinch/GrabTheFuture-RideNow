@@ -151,6 +151,16 @@ class NominatimGeocoder:
             print(f"[Geocoder] Reverse geocoding exception: {e}")
         return None
 
+    def _haversine_distance(self, lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+        """Calculates great-circle distance (km) between two GPS coordinates."""
+        import math
+        R = 6371.0  # Earth radius in km
+        phi1, phi2 = math.radians(lat1), math.radians(lat2)
+        dphi = math.radians(lat2 - lat1)
+        dlambda = math.radians(lng2 - lng1)
+        a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+        return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
     def normalize_vietnam_address(self, address: str) -> str:
         # Lazy import to avoid potential circular dependencies
         from app.core.config import settings
@@ -234,26 +244,64 @@ class NominatimGeocoder:
             country_code = "vn"
             
         # If the target country is Vietnam, run address normalization via GeoVina API (handling merged addresses)
+        original_address = address
         if country_code == "vn":
             address = self.normalize_vietnam_address(address)
             
         params["countrycodes"] = country_code
         params["q"] = address
         
-        try:
-            response = requests.get(self.base_url, params=params, headers=self.headers, timeout=10)
-            if response.status_code == 200:
-                results = response.json()
-                if results:
-                    best_match = results[0]
-                    return {
-                        "lat": float(best_match["lat"]),
-                        "lng": float(best_match["lon"]),
-                        "display_name": best_match["display_name"]
-                    }
-            else:
-                print(f"[Geocoder] Nominatim error {response.status_code}: {response.text}")
-        except Exception as e:
-            print(f"[Geocoder] Exception occurred during geocoding: {e}")
-        return None
+        # GPS_VALIDATION_THRESHOLD: if the geocoded result is farther than this (km) from
+        # the user's actual GPS position, we treat it as a hallucinated/wrong address and retry.
+        GPS_VALIDATION_KM = 5.0
+        
+        def _do_search(search_params: dict) -> Optional[Dict[str, Any]]:
+            try:
+                response = requests.get(self.base_url, params=search_params, headers=self.headers, timeout=10)
+                if response.status_code == 200:
+                    results = response.json()
+                    if results:
+                        best = results[0]
+                        return {
+                            "lat": float(best["lat"]),
+                            "lng": float(best["lon"]),
+                            "display_name": best["display_name"]
+                        }
+                else:
+                    print(f"[Geocoder] Nominatim error {response.status_code}: {response.text}")
+            except Exception as e:
+                print(f"[Geocoder] Exception during geocoding: {e}")
+            return None
+
+        result = _do_search(params)
+
+        # GPS-aware validation: if we have user GPS and the result is suspiciously far,
+        # retry with the original (un-normalized) address and a strict tight GPS bounding box.
+        if result and latitude is not None and longitude is not None:
+            dist_km = self._haversine_distance(latitude, longitude, result["lat"], result["lng"])
+            if dist_km > GPS_VALIDATION_KM:
+                print(
+                    f"[Geocoder] Result '{result['display_name']}' is {dist_km:.1f}km from user GPS "
+                    f"({latitude}, {longitude}) - exceeds {GPS_VALIDATION_KM}km threshold. "
+                    f"Retrying with strict GPS bounding and original address."
+                )
+                # Retry: original address (not GeoVina-normalized), stricter ~2km viewport, bounded=1
+                retry_params = {
+                    "q": original_address,
+                    "format": "json",
+                    "limit": 3,
+                    "addressdetails": 1,
+                    "countrycodes": country_code,
+                    "viewbox": f"{longitude - 0.02},{latitude + 0.02},{longitude + 0.02},{latitude - 0.02}",
+                    "bounded": 1,
+                }
+                retry_result = _do_search(retry_params)
+                if retry_result:
+                    dist_retry = self._haversine_distance(latitude, longitude, retry_result["lat"], retry_result["lng"])
+                    print(f"[Geocoder] Strict-bounded retry succeeded: '{retry_result['display_name']}' ({dist_retry:.1f}km from user)")
+                    return retry_result
+                else:
+                    print(f"[Geocoder] Strict-bounded retry found no result. Returning original (far) result.")
+
+        return result
 

@@ -104,3 +104,44 @@ def test_normalize_vietnam_address_success():
                 headers={"X-Api-Key": "mock_key", "Content-Type": "application/json"},
                 timeout=5
             )
+
+def test_haversine_distance():
+    """Đảm bảo tính khoảng cách Haversine chính xác."""
+    geocoder = NominatimGeocoder()
+    # TP.HCM -> Hà Nội ~1,145km
+    dist = geocoder._haversine_distance(10.762622, 106.660172, 21.0285, 105.8542)
+    assert 1100 < dist < 1200
+    # Khoảng cách 0 với cùng tọa độ
+    assert geocoder._haversine_distance(10.0, 106.0, 10.0, 106.0) == 0.0
+
+def test_geocode_gps_validation_retry():
+    """Đảm bảo geocode retry với địa chỉ gốc và strict bounding khi kết quả ban đầu quá xa user GPS."""
+    geocoder = NominatimGeocoder()
+    # Giả lập user đang ở Quận 3, TP.HCM (10.776, 106.690)
+    user_lat, user_lng = 10.776, 106.690
+
+    # Kết quả lần 1: Nominatim trả về tọa độ xa (10km+), giống như bị hallucinate sai quận
+    far_result = [{"lat": "10.870", "lon": "106.803", "display_name": "Sai địa điểm xa"}]
+    # Kết quả lần 2 (retry bounded): Nominatim trả về tọa độ gần đúng
+    near_result = [{"lat": "10.778", "lon": "106.691", "display_name": "Đúng địa điểm gần"}]
+
+    call_count = {"n": 0}
+    def mock_get_side_effect(url, params=None, headers=None, timeout=None):
+        call_count["n"] += 1
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        if call_count["n"] == 1:
+            mock_resp.json.return_value = far_result
+        else:
+            mock_resp.json.return_value = near_result
+        return mock_resp
+
+    with patch("requests.get", side_effect=mock_get_side_effect):
+        with patch("requests.post") as mock_post:
+            mock_post.return_value = MagicMock(status_code=401)
+            result = geocoder.geocode("50 Cao Thắng, Phường Bến Cờ", user_lat, user_lng)
+
+    assert result is not None
+    assert result["display_name"] == "Đúng địa điểm gần"
+    assert call_count["n"] == 2  # Đã gọi 2 lần: lần 1 bị reject vì xa, lần 2 retry bounded
+
