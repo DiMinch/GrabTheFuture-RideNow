@@ -12,11 +12,10 @@ import * as Speech from 'expo-speech';
 import BookingDetailsCard, { Booking } from '@/components/rider/BookingDetailsCard';
 import { getBookingStatusText, getNextBookingStatus, normalizeBookingStatus } from '../../utils/bookingStatus';
 import { updateBookingStatus } from '../../services/bookings';
+import { API_BASE_URL } from '../../config';
 
 // Khai báo kiểu Props cho màn hình này
 type Props = NativeStackScreenProps<RootStackParamList, 'ActiveRide'>;
-
-const API_BASE_URL = 'http://192.168.x.x:3000'; // Đổi lại IP của bạn
 
 export default function ActiveRideScreen({ route, navigation }: Props): React.JSX.Element {
   // Lấy ride_id (chính là bookingId) được truyền từ RiderHomeScreen sang

@@ -8,6 +8,7 @@ import {
 import * as Haptics from 'expo-haptics';
 import * as Speech from 'expo-speech';
 import { AiStreamClient, type AiStreamIncomingMessage } from '../../services/aiStream';
+import { API_BASE_URL, AI_GATEWAY_WS_URL } from '../../config';
 
 export type RiderStackParamList = {
   RiderHome: undefined;
@@ -37,10 +38,6 @@ const VOICE_PROMPTS = {
 const BOOKING_DESTINATION = 'Bến xe Miền Đông Mới';
 const RIDER_ID = 'mock-user-123';
 const RIDER_LOCATION = { latitude: 10.762622, longitude: 106.660172 };
-
-// Định nghĩa Base URL của Backend (nên đưa vào file .env trong thực tế)
-const API_BASE_URL = 'http://localhost:3000'; // Thay bằng IP thật của backend
-const AI_GATEWAY_WS_URL = 'ws://localhost:8000/api/ai/stream';
 
 // Cấu trúc dữ liệu gửi đi (Request Body) theo chuẩn OpenAPI
 interface BookingRequest {

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, useColorScheme } from 'react-
 import * as Location from 'expo-location';
 import * as Speech from 'expo-speech';
 import { updateDriverLocation } from '../../services/drivers';
+import { API_BASE_URL } from '../../config';
 
 interface DriverTrackingScreenProps {
   onConfirmPickup: () => void;
@@ -17,7 +18,6 @@ type DriverPosition = {
   bearing?: number;
 };
 
-const API_BASE_URL = 'http://localhost:5000/api';
 const DEFAULT_DRIVER_ID = 'driver-mock-1';
 const LOCATION_UPDATE_INTERVAL_MS = 10000;
 
