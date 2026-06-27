@@ -1,576 +1,207 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
+  ActivityIndicator,
+  TouchableOpacity,
 } from 'react-native';
-import * as Brightness from 'expo-brightness';
-import * as Haptics from 'expo-haptics';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../../../App'; // Đường dẫn có thể thay đổi tùy cấu trúc thư mục của bạn
 import * as Speech from 'expo-speech';
+import BookingDetailsCard, { Booking } from '@/components/rider/BookingDetailsCard';
 
-type RideStatus = 'MATCHED' | 'EN_ROUTE' | 'ARRIVED';
+// Khai báo kiểu Props cho màn hình này
+type Props = NativeStackScreenProps<RootStackParamList, 'ActiveRide'>;
 
-type RideSnapshot = {
-  status: RideStatus;
-  rider: {
-    lat: number;
-    lng: number;
-    signal_tapped: boolean;
-  };
-  driver: {
-    name: string;
-    plate: string;
-    ble_major_minor: string;
-    lat: number;
-    lng: number;
-  };
-};
+const API_BASE_URL = 'http://192.168.x.x:3000'; // Đổi lại IP của bạn
 
-type ActiveRideNavigation = {
-  goBack?: () => void;
-};
+export default function ActiveRideScreen({ route, navigation }: Props): React.JSX.Element {
+  // Lấy ride_id (chính là bookingId) được truyền từ RiderHomeScreen sang
+  const { ride_id } = route.params;
 
-type ActiveRideScreenProps = {
-  navigation: ActiveRideNavigation;
-  route: {
-    params: {
-      ride_id: string;
-    };
-  };
-};
+  // Khởi tạo các state
+  const [booking, setBooking] = useState<Booking | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
-const INITIAL_RIDE: RideSnapshot = {
-  status: 'MATCHED',
-  rider: {
-    lat: 10.8756,
-    lng: 106.8007,
-    signal_tapped: false,
-  },
-  driver: {
-    name: 'Nguyễn Văn A',
-    plate: '59X3-1234',
-    ble_major_minor: '12345-67890',
-    lat: 10.8762,
-    lng: 106.8015,
-  },
-};
-
-const MOCK_RIDE_ID = 'ride_999';
-const EXPECTED_BLE_SIGNATURE = '12345-67890';
-const DRIVER_ANNOUNCEMENT = 'Tài xế Nguyễn Văn A - Mã nhận diện: Bông Hoa';
-const SIMULATION_STEP_MS = 3000;
-const FLASH_THRESHOLD_METERS = 20;
-const RADAR_THRESHOLD_METERS = 100;
-const HANDSHAKE_THRESHOLD_METERS = 5;
-const FLASH_INTERVAL_MS = 400;
-const FLASH_ON_COLOR = '#00FF66';
-const FLASH_OFF_COLOR = '#FFFFFF';
-
-const delay = (ms: number): Promise<void> =>
-  new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-
-const speakAsync = (text: string): Promise<void> => {
-  Speech.stop();
-
-  return new Promise((resolve) => {
-    Speech.speak(text, {
-      language: 'vi-VN',
-      rate: 0.95,
-      pitch: 1,
-      onDone: resolve,
-      onStopped: resolve,
-      onError: (_error: Error) => {
-        resolve();
-      },
-    });
-  });
-};
-
-const mockPost = async <TResponse,>(
-  endpoint: string,
-  payload: Record<string, unknown>,
-  latencyMs: number
-): Promise<TResponse> => {
-  await delay(latencyMs);
-
-  return {
-    ok: true,
-    endpoint,
-    payload,
-    simulatedAt: new Date().toISOString(),
-  } as TResponse;
-};
-
-const toRadians = (degrees: number): number => (degrees * Math.PI) / 180;
-const toDegrees = (radians: number): number => (radians * 180) / Math.PI;
-
-const normalizeAngle = (angle: number): number => ((angle % 360) + 360) % 360;
-
-const angleDifference = (source: number, target: number): number => {
-  const diff = normalizeAngle(target - source);
-  return diff > 180 ? diff - 360 : diff;
-};
-
-const approachAngle = (current: number, target: number, step: number): number => {
-  const diff = angleDifference(current, target);
-
-  if (Math.abs(diff) <= step) {
-    return normalizeAngle(target);
-  }
-
-  return normalizeAngle(current + Math.sign(diff) * step);
-};
-
-const calculateDistanceMeters = (
-  fromLat: number,
-  fromLng: number,
-  toLat: number,
-  toLng: number
-): number => {
-  const earthRadiusMeters = 6_371_000;
-  const latDelta = toRadians(toLat - fromLat);
-  const lngDelta = toRadians(toLng - fromLng);
-  const lat1 = toRadians(fromLat);
-  const lat2 = toRadians(toLat);
-
-  const a =
-    Math.sin(latDelta / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(lngDelta / 2) ** 2;
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  return earthRadiusMeters * c;
-};
-
-const calculateBearingDegrees = (
-  fromLat: number,
-  fromLng: number,
-  toLat: number,
-  toLng: number
-): number => {
-  const lat1 = toRadians(fromLat);
-  const lat2 = toRadians(toLat);
-  const deltaLng = toRadians(toLng - fromLng);
-
-  const y = Math.sin(deltaLng) * Math.cos(lat2);
-  const x =
-    Math.cos(lat1) * Math.sin(lat2) -
-    Math.sin(lat1) * Math.cos(lat2) * Math.cos(deltaLng);
-
-  return normalizeAngle(toDegrees(Math.atan2(y, x)));
-};
-
-const moveTowards = (
-  sourceLat: number,
-  sourceLng: number,
-  targetLat: number,
-  targetLng: number,
-  fraction: number
-): { lat: number; lng: number } => ({
-  lat: sourceLat + (targetLat - sourceLat) * fraction,
-  lng: sourceLng + (targetLng - sourceLng) * fraction,
-});
-
-const getDirectionPhrase = (differenceDegrees: number): string => {
-  const normalized = normalizeAngle(differenceDegrees);
-
-  if (normalized <= 22.5 || normalized > 337.5) {
-    return 'phía trước';
-  }
-
-  if (normalized <= 67.5) {
-    return 'phía trước bên phải';
-  }
-
-  if (normalized <= 112.5) {
-    return 'bên phải';
-  }
-
-  if (normalized <= 157.5) {
-    return 'phía sau bên phải';
-  }
-
-  if (normalized <= 202.5) {
-    return 'phía sau';
-  }
-
-  if (normalized <= 247.5) {
-    return 'phía sau bên trái';
-  }
-
-  if (normalized <= 292.5) {
-    return 'bên trái';
-  }
-
-  return 'phía trước bên trái';
-};
-
-async function playRadarFeedback(): Promise<void> {
-  try {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    await delay(100);
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await delay(100);
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  } catch {
-    // Haptics are best-effort.
-  }
-}
-
-async function playSignalFeedback(): Promise<void> {
-  try {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    await delay(90);
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    await delay(90);
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  } catch {
-    // Haptics are best-effort.
-  }
-}
-
-export default function ActiveRideScreen({ navigation, route }: ActiveRideScreenProps): React.JSX.Element {
-  const rideId = route.params.ride_id;
-  const [rideSnapshot, setRideSnapshot] = useState<RideSnapshot>(INITIAL_RIDE);
-  const [deviceHeading, setDeviceHeading] = useState(145);
-  const [isBeaconFlashOn, setIsBeaconFlashOn] = useState(false);
-  const [isBrightnessForced, setIsBrightnessForced] = useState(false);
-  const originalBrightnessRef = useRef<number | null>(null);
-  const lastAnnouncementRef = useRef('');
-  const lastTapRef = useRef(0);
-  const handshakeConfirmedRef = useRef(false);
-  const mountedRef = useRef(true);
-
+  // Gọi API ngay khi màn hình vừa render xong
   useEffect(() => {
-    const timer = setInterval(() => {
-      setRideSnapshot((current) => {
-        if (current.status === 'ARRIVED') {
-          return current;
-        }
+    fetchBookingDetails();
 
-        const currentDistance = calculateDistanceMeters(
-          current.rider.lat,
-          current.rider.lng,
-          current.driver.lat,
-          current.driver.lng
-        );
+    return () => {
+      Speech.stop(); // Cancel speech when screen is unmount
+    };
+  }, [ride_id]);
 
-        if (currentDistance <= HANDSHAKE_THRESHOLD_METERS) {
-          return {
-            ...current,
-            status: 'ARRIVED',
-          };
-        }
+  const fetchBookingDetails = async () => {
+    try {
+      setLoading(true);
+      setError(null);
 
-        const fraction = currentDistance > RADAR_THRESHOLD_METERS ? 0.18 : currentDistance > FLASH_THRESHOLD_METERS ? 0.32 : 0.5;
-        const nextDriverPosition = moveTowards(
-          current.driver.lat,
-          current.driver.lng,
-          current.rider.lat,
-          current.rider.lng,
-          fraction
-        );
-
-        return {
-          ...current,
-          status: 'EN_ROUTE',
-          driver: {
-            ...current.driver,
-            lat: nextDriverPosition.lat,
-            lng: nextDriverPosition.lng,
-          },
-        };
+      // Gọi phương thức GET
+      const response = await fetch(`${API_BASE_URL}/bookings/${ride_id}`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        }, 
       });
-    }, SIMULATION_STEP_MS);
 
-    return () => {
-      clearInterval(timer);
-    };
-  }, []);
-
-  const distanceMeters = useMemo(
-    () =>
-      calculateDistanceMeters(
-        rideSnapshot.rider.lat,
-        rideSnapshot.rider.lng,
-        rideSnapshot.driver.lat,
-        rideSnapshot.driver.lng
-      ),
-    [rideSnapshot.driver.lat, rideSnapshot.driver.lng, rideSnapshot.rider.lat, rideSnapshot.rider.lng]
-  );
-
-  const bearingDegrees = useMemo(
-    () =>
-      calculateBearingDegrees(
-        rideSnapshot.rider.lat,
-        rideSnapshot.rider.lng,
-        rideSnapshot.driver.lat,
-        rideSnapshot.driver.lng
-      ),
-    [rideSnapshot.driver.lat, rideSnapshot.driver.lng, rideSnapshot.rider.lat, rideSnapshot.rider.lng]
-  );
-
-  useEffect(() => {
-    setDeviceHeading((currentHeading) => {
-      const approachStep = distanceMeters <= FLASH_THRESHOLD_METERS ? 26 : distanceMeters <= RADAR_THRESHOLD_METERS ? 18 : 12;
-      return approachAngle(currentHeading, bearingDegrees, approachStep);
-    });
-  }, [bearingDegrees, distanceMeters]);
-
-  const headingOffset = angleDifference(deviceHeading, bearingDegrees);
-  const directionPhrase = getDirectionPhrase(headingOffset);
-  const isRadarActive = distanceMeters <= RADAR_THRESHOLD_METERS && distanceMeters > HANDSHAKE_THRESHOLD_METERS;
-  const isFlashActive = distanceMeters <= FLASH_THRESHOLD_METERS && distanceMeters > HANDSHAKE_THRESHOLD_METERS;
-  const isHandshakeReady = distanceMeters <= HANDSHAKE_THRESHOLD_METERS;
-  const isAligned = isRadarActive && Math.abs(headingOffset) <= 18;
-
-  useEffect(() => {
-    let active = true;
-
-    const syncBrightness = async (): Promise<void> => {
-      if (!isFlashActive) {
-        setIsBrightnessForced(false);
-
-        if (originalBrightnessRef.current !== null) {
-          try {
-            await Brightness.setBrightnessAsync(originalBrightnessRef.current);
-          } catch {
-            // Best-effort restore.
-          }
+      // Xử lý các HTTP Status Code theo document
+      if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error('Booking not found (Không tìm thấy chuyến đi)');
         }
-
-        return;
+        throw new Error('Đã xảy ra lỗi khi tải dữ liệu');
       }
 
-      try {
-        if (originalBrightnessRef.current === null) {
-          originalBrightnessRef.current = await Brightness.getBrightnessAsync();
-        }
+      // Parse JSON thành công (Mã 200)
+      const data: Booking = await response.json();
+      setBooking(data);
 
-        const permission = await Brightness.requestPermissionsAsync();
+      // Đọc Text-to-Speech tự động cập nhật trạng thái mới nhất cho người dùng
+      const statusMessage = data.status === 'PENDING' || data.status === 'SEARCHING_FOR_DRIVER'
+        ? 'Đã kết nối dữ liệu hành trình. Hệ thống đang tích cực tìm kiếm tài xế.'
+        : 'Cập nhật thông tin chuyến đi thành công.';
+      void Speech.speak(statusMessage, { language: 'vi-VN' });
 
-        if (permission.status === 'granted') {
-          await Brightness.setBrightnessAsync(1);
-          if (active) {
-            setIsBrightnessForced(true);
-          }
-        }
-      } catch {
-        if (active) {
-          setIsBrightnessForced(false);
-        }
-      }
-    };
-
-    void syncBrightness();
-
-    return () => {
-      active = false;
-    };
-  }, [isFlashActive]);
-
-  useEffect(() => {
-    if (!isFlashActive) {
-      setIsBeaconFlashOn(false);
-      return;
+    } catch (err: any) {
+      setError(err.message || 'Lỗi mạng');
+    } finally {
+      setLoading(false);
     }
-
-    const timer = setInterval(() => {
-      setIsBeaconFlashOn((current) => !current);
-    }, FLASH_INTERVAL_MS);
-
-    return () => {
-      clearInterval(timer);
-      setIsBeaconFlashOn(false);
-    };
-  }, [isFlashActive]);
-
-  useEffect(() => {
-    if (!isAligned) {
-      return;
-    }
-
-    const announcement = `Xe đang ở ${directionPhrase}, ${Math.max(1, Math.round(distanceMeters))} mét`;
-
-    if (lastAnnouncementRef.current === announcement) {
-      return;
-    }
-
-    lastAnnouncementRef.current = announcement;
-
-    void playRadarFeedback();
-    void speakAsync(`${announcement}.`);
-  }, [directionPhrase, distanceMeters, isAligned]);
-
-  useEffect(() => {
-    if (!isHandshakeReady || handshakeConfirmedRef.current) {
-      return;
-    }
-
-    handshakeConfirmedRef.current = true;
-
-    const confirmHandshake = async (): Promise<void> => {
-      try {
-        const bleMatch = rideSnapshot.driver.ble_major_minor === EXPECTED_BLE_SIGNATURE;
-
-        if (!bleMatch) {
-          handshakeConfirmedRef.current = false;
-          return;
-        }
-
-        await mockPost<{ ok: true; endpoint: string; payload: Record<string, unknown> }>(
-          `/api/v1/rides/${MOCK_RIDE_ID}/start`,
-          {
-            ride_id: MOCK_RIDE_ID,
-            driver_ble_signature: rideSnapshot.driver.ble_major_minor,
-          },
-          500
-        );
-
-        await speakAsync(DRIVER_ANNOUNCEMENT);
-        setRideSnapshot((current) => ({
-          ...current,
-          status: 'ARRIVED',
-        }));
-
-        setIsBeaconFlashOn(false);
-        setIsBrightnessForced(false);
-
-        if (originalBrightnessRef.current !== null) {
-          try {
-            await Brightness.setBrightnessAsync(originalBrightnessRef.current);
-          } catch {
-            // Best-effort restore.
-          }
-        }
-
-        await delay(700);
-
-        if (mountedRef.current) {
-          navigation.goBack?.();
-        }
-      } catch {
-        handshakeConfirmedRef.current = false;
-      }
-    };
-
-    void confirmHandshake();
-  }, [isHandshakeReady, navigation, rideSnapshot.driver.ble_major_minor]);
-
-  useEffect(() => {
-    return () => {
-      mountedRef.current = false;
-      Speech.stop();
-
-      if (originalBrightnessRef.current !== null) {
-        void Brightness.setBrightnessAsync(originalBrightnessRef.current);
-      }
-    };
-  }, []);
-
-  const handleSignalTap = (): void => {
-    const now = Date.now();
-    const delta = now - lastTapRef.current;
-
-    if (delta > 0 && delta < 320) {
-      lastTapRef.current = 0;
-
-      setRideSnapshot((current) => ({
-        ...current,
-        rider: {
-          ...current.rider,
-          signal_tapped: true,
-        },
-      }));
-
-      void playSignalFeedback();
-      void speakAsync('Tín hiệu báo xe đã được gửi tới tài xế.');
-      return;
-    }
-
-    lastTapRef.current = now;
   };
 
-  const backgroundColor = isFlashActive ? (isBeaconFlashOn ? FLASH_ON_COLOR : FLASH_OFF_COLOR) : '#04111E';
-  const textColor = isFlashActive ? '#0B1220' : '#FFFFFF';
-  const overlayText = isHandshakeReady
-    ? 'Tài xế đã đến sát điểm đón. Chạm đúp để báo tín hiệu cuối cùng hoặc chờ xác nhận tự động.'
-    : isFlashActive
-      ? 'Beacon đã bật. Giữ màn hình sáng để hỗ trợ tài xế xác định vị trí.'
-      : isRadarActive
-        ? `Xe đang ở ${directionPhrase}, ${Math.max(1, Math.round(distanceMeters))} mét.`
-        : `Đang theo dõi tài xế. Khoảng cách còn ${Math.max(1, Math.round(distanceMeters))} mét.`;
-
-  return (
-    <TouchableOpacity
-      accessible
-      accessibilityRole="button"
-      accessibilityLabel={overlayText}
-      accessibilityHint="Chạm hai lần nhanh để gửi tín hiệu báo xe cho tài xế."
-      accessibilityState={{ busy: isFlashActive || isHandshakeReady }}
-      activeOpacity={1}
-      onPress={handleSignalTap}
-      style={[styles.screen, { backgroundColor }]}
-    >
-      <View style={styles.content}>
-        <Text style={[styles.title, { color: textColor }]}>Blind Beacon - Active Ride</Text>
-        <Text style={[styles.heading, { color: textColor }]}>{overlayText}</Text>
-
-        <View style={[styles.panel, isFlashActive && styles.lightPanel]}>
-          <Text style={[styles.metaText, { color: textColor }]}>Ride ID: {rideId}</Text>
-          <Text style={[styles.metaText, { color: textColor }]}>Status: {rideSnapshot.status}</Text>
-          <Text style={[styles.metaText, { color: textColor }]}>Driver: {rideSnapshot.driver.name}</Text>
-          <Text style={[styles.metaText, { color: textColor }]}>Plate: {rideSnapshot.driver.plate}</Text>
-          <Text style={[styles.metaText, { color: textColor }]}>BLE: {rideSnapshot.driver.ble_major_minor}</Text>
-          <Text style={[styles.metaText, { color: textColor }]}>Signal tapped: {rideSnapshot.rider.signal_tapped ? 'true' : 'false'}</Text>
-          <Text style={[styles.metaText, { color: textColor }]}>Brightness forced: {isBrightnessForced ? 'true' : 'false'}</Text>
-        </View>
+  // 1. Giao diện lúc đang tải dữ liệu
+  if (loading) {
+    return (
+      <View style={styles.centerContainer}>
+        <ActivityIndicator size="large" color="#ffffff" />
+        <Text style={styles.loadingText}>Đang lấy thông tin chuyến đi...</Text>
       </View>
-    </TouchableOpacity>
+    );
+  }
+
+  // 2. Giao diện lúc có lỗi (hoặc 404)
+  // Trạng thái Lỗi (Bao gồm lỗi 404 hoặc lỗi mạng)
+  if (error) {
+    return (
+      <View style={styles.centerContainer}>
+        <Text style={styles.errorText}>{error}</Text>
+        
+        <TouchableOpacity 
+          style={styles.retryButton} 
+          onPress={fetchBookingDetails}
+          accessible
+          accessibilityRole="button"
+          accessibilityLabel="Thử lại"
+          accessibilityHint="Chạm hai lần để gửi lại lệnh tải thông tin chuyến đi"
+        >
+          <Text style={styles.buttonText}>Thử lại</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.backButton} 
+          onPress={() => navigation.goBack()}
+          accessible
+          accessibilityRole="button"
+          accessibilityLabel="Quay lại trang chủ"
+        >
+          <Text style={styles.buttonText}>Quay lại trang chủ</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // 3. Giao diện hiển thị chi tiết Booking thành công
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title} accessible accessibilityRole="header">
+        Hành Trình Hiện Tại
+      </Text>
+
+      {booking && <BookingDetailsCard booking={booking} />}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
+  container: {
     flex: 1,
+    backgroundColor: '#0B1D39',
+    padding: 24,
+    paddingTop: 60,
   },
-  content: {
+  centerContainer: {
     flex: 1,
+    backgroundColor: '#0B1D39',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 24,
+    padding: 24,
+  },
+  loadingText: {
+    marginTop: 16,
+    color: '#ffffff',
+    fontSize: 16,
+  },
+  errorText: {
+    color: '#ff6b6b',
+    fontSize: 18,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  buttonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  retryButton: {
+    backgroundColor: '#123A63',
+    padding: 12,
+    borderRadius: 8,
+    minWidth: 120,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  backButton: {
+    backgroundColor: '#4A1B58',
+    padding: 12,
+    borderRadius: 8,
+    minWidth: 120,
+    alignItems: 'center',
+  },
+  retryText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   title: {
-    fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
-    textAlign: 'center',
-    marginBottom: 14,
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 20,
   },
-  heading: {
-    fontSize: 28,
-    lineHeight: 36,
-    fontWeight: '800',
-    textAlign: 'center',
+  card: {
+    backgroundColor: '#123A63',
+    padding: 20,
+    borderRadius: 12,
   },
-  panel: {
-    width: '100%',
-    marginTop: 24,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.16)',
-    paddingVertical: 18,
-    paddingHorizontal: 18,
+  infoLabel: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 14,
+    marginTop: 12,
   },
-  lightPanel: {
-    backgroundColor: 'rgba(255,255,255,0.28)',
+  infoValue: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '500',
+    marginTop: 4,
   },
-  metaText: {
-    fontSize: 16,
-    lineHeight: 24,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
+  statusValue: {
+    color: '#4ade80', // Xanh lá cây nổi bật cho trạng thái
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginTop: 4,
+  }
 });
