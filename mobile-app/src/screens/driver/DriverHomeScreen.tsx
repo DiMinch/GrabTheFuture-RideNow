@@ -139,12 +139,14 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#1a2235' },
   langBtn: { position: 'absolute', top: 110, right: 16, zIndex: 20 },
   driverMarker: {
-    width: 46, height: 46, alignItems: 'center', justifyContent: 'center',
+    width: 120, height: 120, alignItems: 'center', justifyContent: 'center',
   },
   pulseRing: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: ACCENT,
+    position: 'absolute',
+    width: 46,
+    height: 46,
     borderRadius: 23,
+    backgroundColor: ACCENT,
   },
   carIcon: {
     width: 24, height: 24,

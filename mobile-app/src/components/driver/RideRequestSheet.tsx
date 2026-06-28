@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Animated, TouchableOpacity, Vibration } from 'react-native';
+import { View, Text, StyleSheet, Animated, TouchableOpacity, Vibration, ScrollView } from 'react-native';
 import { useLang } from '../../context/LanguageContext';
 import * as Speech from 'expo-speech';
 
@@ -16,7 +16,7 @@ interface Props {
 
 const RideRequestSheet: React.FC<Props> = ({ isVisible, onAccept, onReject }) => {
   const { t, lang } = useLang();
-  const slideAnim = useRef(new Animated.Value(400)).current;
+  const slideAnim = useRef(new Animated.Value(600)).current;
   const [countdown, setCountdown] = useState(15);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const acceptedRef = useRef(false);
@@ -63,7 +63,7 @@ const RideRequestSheet: React.FC<Props> = ({ isVisible, onAccept, onReject }) =>
 
   const handleClose = (callback?: () => void) => {
     Animated.timing(slideAnim, {
-      toValue: 400,
+      toValue: 600,
       duration: 300,
       useNativeDriver: true,
     }).start(() => {
@@ -84,7 +84,7 @@ const RideRequestSheet: React.FC<Props> = ({ isVisible, onAccept, onReject }) =>
 
   const countdownColor = countdown > 5 ? '#00E676' : '#FF1744';
 
-  if (!isVisible && slideAnim.interpolate({ inputRange: [0, 400], outputRange: [1, 0] }) as any === 0) {
+  if (!isVisible && slideAnim.interpolate({ inputRange: [0, 600], outputRange: [1, 0] }) as any === 0) {
     return null; // hide fully if not visible
   }
 
@@ -92,59 +92,65 @@ const RideRequestSheet: React.FC<Props> = ({ isVisible, onAccept, onReject }) =>
     <Animated.View style={[styles.rideRequestSheet, { transform: [{ translateY: slideAnim }] }]}>
       <View style={styles.dragHandle} />
 
-      <View style={styles.countdownRow}>
-        <View style={[styles.countdownCircle, { borderColor: countdownColor }]}>
-          <Text style={[styles.countdownText, { color: countdownColor }]}>{countdown}</Text>
-        </View>
-        <View style={styles.rideHeaderInfo}>
-          <View style={styles.accessibilityBadge}>
-            <Text style={styles.accessibilityIcon}>♿</Text>
-            <Text style={styles.accessibilityBadgeText}>{t('accessibilityRequest')}</Text>
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        style={styles.scrollContainer}
+        contentContainerStyle={styles.scrollContent}
+      >
+        <View style={styles.countdownRow}>
+          <View style={[styles.countdownCircle, { borderColor: countdownColor }]}>
+            <Text style={[styles.countdownText, { color: countdownColor }]}>{countdown}</Text>
           </View>
-          <Text style={styles.rideTitle}>{t('visuallyImpaired')}</Text>
-          <Text style={styles.ratingText}>⭐ 4.8 · 23 {t('rides')}</Text>
-        </View>
-      </View>
-
-      <View style={styles.divider} />
-
-      <View style={styles.routeInfo}>
-        <View style={styles.routeIconCol}>
-          <View style={styles.routeDotGreen} />
-          <View style={styles.routeConnector} />
-          <View style={styles.routeDotRed} />
-        </View>
-        <View style={styles.routeTextCol}>
-          <View style={styles.routeBlock}>
-            <Text style={styles.routeBlockLabel}>{t('pickup')}</Text>
-            <Text style={styles.routeBlockText}>235 Nguyễn Văn Cừ, Phường 4, Q.5</Text>
-          </View>
-          <View style={styles.routeBlock}>
-            <Text style={styles.routeBlockLabel}>{t('dropoff')}</Text>
-            <Text style={styles.routeBlockText}>Bệnh viện Chợ Rẫy, Q.5</Text>
+          <View style={styles.rideHeaderInfo}>
+            <View style={styles.accessibilityBadge}>
+              <Text style={styles.accessibilityIcon}>♿</Text>
+              <Text style={styles.accessibilityBadgeText}>{t('accessibilityRequest')}</Text>
+            </View>
+            <Text style={styles.rideTitle}>{t('visuallyImpaired')}</Text>
+            <Text style={styles.ratingText}>⭐ 4.8 · 23 {t('rides')}</Text>
           </View>
         </View>
-        <View style={styles.fareBadge}>
-          <Text style={styles.fareAmount}>₫42K</Text>
-          <Text style={styles.fareDistance}>3.2 km</Text>
-        </View>
-      </View>
 
-      <View style={styles.noteBox}>
-        <Text style={styles.noteIcon}>💡</Text>
-        <Text style={styles.noteText}>{t('specialNote')}</Text>
-      </View>
+        <View style={styles.divider} />
 
-      <View style={styles.etaRow}>
-        <View style={styles.etaBadge}>
-          <Text style={styles.etaIcon}>🕐</Text>
-          <Text style={styles.etaText}>~4 {t('minToPickup')}</Text>
+        <View style={styles.routeInfo}>
+          <View style={styles.routeIconCol}>
+            <View style={styles.routeDotGreen} />
+            <View style={styles.routeConnector} />
+            <View style={styles.routeDotRed} />
+          </View>
+          <View style={styles.routeTextCol}>
+            <View style={styles.routeBlock}>
+              <Text style={styles.routeBlockLabel}>{t('pickup')}</Text>
+              <Text style={styles.routeBlockText}>235 Nguyễn Văn Cừ, Phường 4, Q.5</Text>
+            </View>
+            <View style={styles.routeBlock}>
+              <Text style={styles.routeBlockLabel}>{t('dropoff')}</Text>
+              <Text style={styles.routeBlockText}>Bệnh viện Chợ Rẫy, Q.5</Text>
+            </View>
+          </View>
+          <View style={styles.fareBadge}>
+            <Text style={styles.fareAmount}>₫42K</Text>
+            <Text style={styles.fareDistance}>3.2 km</Text>
+          </View>
         </View>
-        <View style={styles.etaBadge}>
-          <Text style={styles.etaIcon}>💰</Text>
-          <Text style={styles.etaText}>{t('surge')}</Text>
+
+        <View style={styles.noteBox}>
+          <Text style={styles.noteIcon}>💡</Text>
+          <Text style={styles.noteText}>{t('specialNote')}</Text>
         </View>
-      </View>
+
+        <View style={styles.etaRow}>
+          <View style={styles.etaBadge}>
+            <Text style={styles.etaIcon}>🕐</Text>
+            <Text style={styles.etaText}>~4 {t('minToPickup')}</Text>
+          </View>
+          <View style={styles.etaBadge}>
+            <Text style={styles.etaIcon}>💰</Text>
+            <Text style={styles.etaText}>{t('surge')}</Text>
+          </View>
+        </View>
+      </ScrollView>
 
       <View style={styles.actionRow}>
         <TouchableOpacity style={styles.rejectButton} onPress={handleReject} activeOpacity={0.85}>
@@ -218,6 +224,12 @@ const styles = StyleSheet.create({
   etaIcon: { fontSize: 14, marginRight: 6 },
   etaText: { color: TEXT_PRIMARY, fontSize: 13, fontWeight: '500' },
   actionRow: { flexDirection: 'row', gap: 12 },
+  scrollContainer: {
+    maxHeight: 280,
+  },
+  scrollContent: {
+    paddingBottom: 8,
+  },
   rejectButton: { flex: 0.35, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#1E293B', paddingVertical: 18, borderRadius: 18, borderWidth: 1.5, borderColor: '#FF174440', gap: 6 },
   rejectIcon: { fontSize: 18, color: '#FF1744' },
   rejectButtonText: { color: '#FF1744', fontSize: 15, fontWeight: 'bold', letterSpacing: 0.5 },
