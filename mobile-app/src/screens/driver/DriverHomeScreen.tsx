@@ -78,7 +78,7 @@ const DriverHomeScreen: React.FC<DriverHomeScreenProps> = ({ onAcceptRide, onRej
               <Animated.View style={[
                   styles.pulseRing,
                   {
-                    transform: [{ scale: pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 5.5] }) }],
+                    transform: [{ scale: pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 3.5] }) }],
                     opacity: pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.8, 0] }),
                   }
                 ]} 
@@ -282,7 +282,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#1a2235' },
   langBtn: { position: 'absolute', top: 110, right: 16, zIndex: 20 },
   driverMarker: {
-    width: 250, height: 250, alignItems: 'center', justifyContent: 'center',
+    width: 160, height: 160, alignItems: 'center', justifyContent: 'center',
   },
   pulseRing: {
     position: 'absolute',
@@ -290,8 +290,8 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 20,
     backgroundColor: ACCENT,
-    top: 105, // (250 - 40) / 2 to center perfectly
-    left: 105,
+    top: 60, // (160 - 40) / 2
+    left: 60,
   },
   carIcon: {
     position: 'absolute',
@@ -305,8 +305,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
-    top: 113, // (250 - 24) / 2 to center perfectly
-    left: 113,
+    top: 68, // (160 - 24) / 2
+    left: 68,
   },
   modalOverlay: {
     flex: 1,
