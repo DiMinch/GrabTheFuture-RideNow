@@ -8,6 +8,7 @@ import TrackingBottomSheet from '../../components/driver/TrackingBottomSheet';
 import TrackingAlertBanner from '../../components/driver/TrackingAlertBanner';
 import { useLang } from '../../context/LanguageContext';
 import { updateDriverLocation } from '../../services/drivers';
+import { updateBookingStatus } from '../../services/bookings';
 import { API_BASE_URL } from '../../config';
 
 interface DriverTrackingScreenProps {
@@ -60,9 +61,10 @@ function getLocationErrorMessage(error: unknown): string {
 
 const DriverTrackingScreen: React.FC<DriverTrackingScreenProps> = ({
   onConfirmPickup,
-  driverId = DEFAULT_DRIVER_ID,
+  driverId: driverIdProp,
 }) => {
-  const { driverLocation, distance } = useDriver();
+  const { driverLocation, distance, activeDriver, currentRide } = useDriver();
+  const driverId = driverIdProp || activeDriver?.id || DEFAULT_DRIVER_ID;
   const { lang } = useLang();
   const mapRef = useRef<MapView>(null);
   
@@ -320,7 +322,17 @@ const DriverTrackingScreen: React.FC<DriverTrackingScreenProps> = ({
         distance={distance}
         bleConnected={bleConnected}
         passengerSignaled={passengerSignaled}
-        onConfirmPickup={() => {
+        onConfirmPickup={async () => {
+          if (currentRide?.id && driverId) {
+            try {
+              await updateBookingStatus(API_BASE_URL, currentRide.id, {
+                status: 'COMPLETED',
+                driverId,
+              });
+            } catch (err) {
+              console.error('[DriverTrackingScreen] Failed to complete booking:', err);
+            }
+          }
           if (onConfirmPickup) onConfirmPickup();
         }}
       />

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import * as Location from 'expo-location';
-import socketService from '../services/socket';
-import { rideApi } from '../services/api';
+import { API_BASE_URL } from '../config';
+import { updateDriverLocation } from '../services/drivers';
 
 export const PASSENGER_COORD = { latitude: 10.7600, longitude: 106.6600 };
 
@@ -12,6 +12,8 @@ interface DriverContextProps {
   currentRide: any;
   setCurrentRide: (ride: any) => void;
   distance: number;
+  activeDriver: any;
+  setActiveDriver: (driver: any) => void;
 }
 
 const DriverContext = createContext<DriverContextProps | undefined>(undefined);
@@ -21,8 +23,41 @@ export const DriverProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [driverLocation, setDriverLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [currentRide, setCurrentRide] = useState<any>(null);
   const [distance, setDistance] = useState(150);
+  const [activeDriver, setActiveDriver] = useState<any>(null);
 
-  // GPS tracking
+  // 1. Fetch active driver session from Firestore on mount
+  useEffect(() => {
+    const initializeDriver = async () => {
+      try {
+        console.log('[DriverContext] Fetching drivers list from:', `${API_BASE_URL}/drivers`);
+        const res = await fetch(`${API_BASE_URL}/drivers`);
+        let driversData = await res.json();
+        
+        let drivers = driversData.data || [];
+        if (drivers.length === 0) {
+          // If no drivers, trigger seeding
+          console.log('[DriverContext] No drivers found, seeding...');
+          await fetch(`${API_BASE_URL}/drivers/seed`, { method: 'POST' });
+          const retryRes = await fetch(`${API_BASE_URL}/drivers`);
+          const retryData = await retryRes.json();
+          drivers = retryData.data || [];
+        }
+
+        if (drivers.length > 0) {
+          // Find first available driver or default to first driver
+          const chosen = drivers.find((d: any) => !d.busy) || drivers[0];
+          console.log('[DriverContext] Selected active driver:', chosen);
+          setActiveDriver(chosen);
+        }
+      } catch (err) {
+        console.error('[DriverContext] Error initializing driver:', err);
+      }
+    };
+
+    initializeDriver();
+  }, []);
+
+  // 2. GPS tracking and syncing driver location to backend
   useEffect(() => {
     let locationSubscription: Location.LocationSubscription | null = null;
     
@@ -42,8 +77,14 @@ export const DriverProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                setDistance(dist);
             });
             
-            if (isOnline) {
-              socketService.send('driver_location_update', { lat: coord.latitude, lng: coord.longitude });
+            // Sync to backend via HTTP POST /drivers/location
+            if (isOnline && activeDriver?.id) {
+              updateDriverLocation(API_BASE_URL, {
+                driverId: activeDriver.id,
+                location: coord,
+              }).catch((err) => {
+                console.warn('[DriverContext] Sync location failed:', err.message);
+              });
             }
           }
         );
@@ -55,21 +96,55 @@ export const DriverProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return () => {
       if (locationSubscription) locationSubscription.remove();
     };
-  }, [isOnline]);
+  }, [isOnline, activeDriver?.id]);
 
-  // Socket setup
+  // 3. Poll for assigned rides (replacing WebSockets since backend is serverless)
   useEffect(() => {
-    socketService.connect();
-    socketService.on('ride_requested', (data: any) => {
-      setCurrentRide(data || { id: 'mock' });
-    });
+    if (!isOnline || !activeDriver?.id) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/bookings`);
+        const result = await res.json();
+        
+        if (result.success && Array.isArray(result.data)) {
+          // Find if there is an active booking assigned to this driver
+          const activeRide = result.data.find(
+            (booking: any) =>
+              booking.driverId === activeDriver.id &&
+              ['pending', 'accepted', 'in_progress', 'arrived'].includes(booking.status)
+          );
+
+          if (activeRide) {
+            // Update current ride state
+            setCurrentRide(activeRide);
+          } else {
+            setCurrentRide(null);
+          }
+        }
+      } catch (err) {
+        console.warn('[DriverContext] Error polling bookings:', err);
+      }
+    }, 3000);
+
     return () => {
-      socketService.disconnect();
+      clearInterval(pollInterval);
     };
-  }, []);
+  }, [isOnline, activeDriver?.id]);
 
   return (
-    <DriverContext.Provider value={{ isOnline, setIsOnline, driverLocation, currentRide, setCurrentRide, distance }}>
+    <DriverContext.Provider
+      value={{
+        isOnline,
+        setIsOnline,
+        driverLocation,
+        currentRide,
+        setCurrentRide,
+        distance,
+        activeDriver,
+        setActiveDriver,
+      }}
+    >
       {children}
     </DriverContext.Provider>
   );

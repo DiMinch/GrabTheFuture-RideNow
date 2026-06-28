@@ -5,6 +5,8 @@ import { LangToggleButton } from '../../context/LanguageContext';
 import { useDriver } from '../../context/DriverContext';
 import DriverTopHUD from '../../components/driver/DriverTopHUD';
 import RideRequestSheet from '../../components/driver/RideRequestSheet';
+import { API_BASE_URL } from '../../config';
+import { updateBookingStatus } from '../../services/bookings';
 
 interface DriverHomeScreenProps {
   onAcceptRide?: () => void;
@@ -12,7 +14,7 @@ interface DriverHomeScreenProps {
 }
 
 const DriverHomeScreen: React.FC<DriverHomeScreenProps> = ({ onAcceptRide, onRejectRide }) => {
-  const { driverLocation, currentRide, setCurrentRide } = useDriver();
+  const { driverLocation, currentRide, setCurrentRide, activeDriver } = useDriver();
   const mapRef = useRef<MapView>(null);
   const [mapReady, setMapReady] = useState(false);
   const pulseAnim = useRef(new Animated.Value(0)).current;
@@ -78,10 +80,30 @@ const DriverHomeScreen: React.FC<DriverHomeScreenProps> = ({ onAcceptRide, onRej
 
       <RideRequestSheet 
         isVisible={!!currentRide} 
-        onAccept={() => {
+        onAccept={async () => {
+          if (currentRide?.id && activeDriver?.id) {
+            try {
+              await updateBookingStatus(API_BASE_URL, currentRide.id, {
+                status: 'ACCEPTED',
+                driverId: activeDriver.id,
+              });
+            } catch (err) {
+              console.error('[DriverHomeScreen] Failed to accept booking:', err);
+            }
+          }
           if (onAcceptRide) onAcceptRide();
         }}
-        onReject={() => {
+        onReject={async () => {
+          if (currentRide?.id && activeDriver?.id) {
+            try {
+              await updateBookingStatus(API_BASE_URL, currentRide.id, {
+                status: 'CANCELLED',
+                driverId: activeDriver.id,
+              });
+            } catch (err) {
+              console.error('[DriverHomeScreen] Failed to reject booking:', err);
+            }
+          }
           setCurrentRide(null);
           if (onRejectRide) onRejectRide();
         }}
