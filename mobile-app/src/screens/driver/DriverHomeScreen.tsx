@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { View, StyleSheet, Animated } from 'react-native';
+import { View, StyleSheet, Animated, Modal, ScrollView, Text, TouchableOpacity } from 'react-native';
 import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 import { LangToggleButton } from '../../context/LanguageContext';
 import { useDriver } from '../../context/DriverContext';
@@ -14,10 +14,24 @@ interface DriverHomeScreenProps {
 }
 
 const DriverHomeScreen: React.FC<DriverHomeScreenProps> = ({ onAcceptRide, onRejectRide }) => {
-  const { driverLocation, currentRide, setCurrentRide, activeDriver } = useDriver();
+  const { 
+    driverLocation, 
+    currentRide, 
+    setCurrentRide, 
+    activeDriver, 
+    setActiveDriver,
+    driversList,
+    refreshDrivers
+  } = useDriver();
   const mapRef = useRef<MapView>(null);
   const [mapReady, setMapReady] = useState(false);
+  const [showAccountSelector, setShowAccountSelector] = useState(false);
+  const [showInfoModal, setShowInfoModal] = useState(false);
   const pulseAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    refreshDrivers();
+  }, []);
 
   useEffect(() => {
     Animated.loop(
@@ -108,6 +122,135 @@ const DriverHomeScreen: React.FC<DriverHomeScreenProps> = ({ onAcceptRide, onRej
           if (onRejectRide) onRejectRide();
         }}
       />
+
+      {/* Floating Driver Account Controls */}
+      <View style={styles.profileControls}>
+        <TouchableOpacity 
+          style={styles.profileBtn} 
+          onPress={() => setShowAccountSelector(true)}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.profileBtnText}>👥</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.profileBtn, { marginTop: 10 }]} 
+          onPress={() => setShowInfoModal(true)}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.profileBtnText}>ℹ️</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Account Selector Modal */}
+      <Modal
+        visible={showAccountSelector}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowAccountSelector(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Chọn tài khoản tài xế</Text>
+              <TouchableOpacity onPress={() => setShowAccountSelector(false)}>
+                <Text style={styles.closeModalText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScroll}>
+              {driversList.map((driver) => {
+                const isSelected = activeDriver?.id === driver.id;
+                return (
+                  <TouchableOpacity
+                    key={driver.id}
+                    style={[
+                      styles.driverAccountItem,
+                      isSelected && styles.driverAccountItemSelected,
+                    ]}
+                    onPress={() => {
+                      setActiveDriver(driver);
+                      setShowAccountSelector(false);
+                    }}
+                  >
+                    <View style={styles.driverAccountRow}>
+                      <Text style={styles.driverAvatar}>🚗</Text>
+                      <View style={styles.driverAccountDetails}>
+                        <Text style={styles.driverAccountName}>{driver.name}</Text>
+                        <Text style={styles.driverAccountPlate}>{driver.plate}</Text>
+                      </View>
+                      <View style={styles.driverAccountStats}>
+                        <Text style={styles.driverAccountRating}>⭐ {driver.rating}</Text>
+                        {driver.busy ? (
+                          <Text style={styles.statusBusy}>Bận</Text>
+                        ) : (
+                          <Text style={styles.statusFree}>Sẵn sàng</Text>
+                        )}
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Driver Info Modal */}
+      <Modal
+        visible={showInfoModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowInfoModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Thông tin tài xế</Text>
+              <TouchableOpacity onPress={() => setShowInfoModal(false)}>
+                <Text style={styles.closeModalText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            {activeDriver ? (
+              <View style={styles.infoContent}>
+                <View style={styles.infoAvatarContainer}>
+                  <Text style={styles.infoAvatar}>👨‍✈️</Text>
+                  <Text style={styles.infoName}>{activeDriver.name}</Text>
+                  <Text style={styles.infoPlate}>{activeDriver.plate}</Text>
+                </View>
+                <View style={styles.infoList}>
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Mã định danh:</Text>
+                    <Text style={styles.infoValue}>{activeDriver.id}</Text>
+                  </View>
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Đánh giá:</Text>
+                    <Text style={styles.infoValue}>⭐ {activeDriver.rating} / 5.0</Text>
+                  </View>
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Trạng thái:</Text>
+                    <Text style={[styles.infoValue, activeDriver.busy ? styles.textBusy : styles.textFree]}>
+                      {activeDriver.busy ? 'Đang bận' : 'Sẵn sàng'}
+                    </Text>
+                  </View>
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Hỗ trợ tiếp cận:</Text>
+                    <Text style={styles.infoValue}>
+                      {activeDriver.accessibilityFriendly ? 'Có hỗ trợ xe lăn' : 'Thông thường'}
+                    </Text>
+                  </View>
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Bluetooth BLE Beacon:</Text>
+                    <Text style={styles.infoValueCode} numberOfLines={1}>
+                      {activeDriver.ble_major_minor || 'Chưa thiết lập'}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            ) : (
+              <Text style={styles.noDriverText}>Chưa chọn tài xế</Text>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -164,7 +307,176 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     top: 48, // (120 - 24) / 2 to center perfectly
     left: 48,
-  }
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContainer: {
+    width: '85%',
+    backgroundColor: '#111827',
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#ffffff15',
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  closeModalText: {
+    color: '#94A3B8',
+    fontSize: 20,
+    padding: 4,
+  },
+  modalScroll: {
+    maxHeight: 400,
+  },
+  driverAccountItem: {
+    backgroundColor: '#1E293B',
+    padding: 14,
+    borderRadius: 16,
+    marginBottom: 10,
+    borderWidth: 1.5,
+    borderColor: '#ffffff08',
+  },
+  driverAccountItemSelected: {
+    borderColor: '#00C896',
+    backgroundColor: '#00C89615',
+  },
+  driverAccountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  driverAvatar: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  driverAccountDetails: {
+    flex: 1,
+  },
+  driverAccountName: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  driverAccountPlate: {
+    color: '#94A3B8',
+    fontSize: 13,
+    marginTop: 2,
+  },
+  driverAccountStats: {
+    alignItems: 'flex-end',
+  },
+  driverAccountRating: {
+    color: '#F59E0B',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  statusBusy: {
+    color: '#EF4444',
+    fontSize: 11,
+    marginTop: 4,
+    fontWeight: 'bold',
+  },
+  statusFree: {
+    color: '#10B981',
+    fontSize: 11,
+    marginTop: 4,
+    fontWeight: 'bold',
+  },
+  profileControls: {
+    position: 'absolute',
+    top: 170,
+    right: 16,
+    zIndex: 20,
+  },
+  profileBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#111827DD',
+    borderWidth: 1,
+    borderColor: '#ffffff15',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  profileBtnText: {
+    fontSize: 18,
+  },
+  infoContent: {
+    alignItems: 'center',
+  },
+  infoAvatarContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  infoAvatar: {
+    fontSize: 50,
+    marginBottom: 10,
+  },
+  infoName: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  infoPlate: {
+    color: '#94A3B8',
+    fontSize: 14,
+    marginTop: 4,
+  },
+  infoList: {
+    width: '100%',
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ffffff08',
+  },
+  infoLabel: {
+    color: '#94A3B8',
+    fontSize: 13,
+  },
+  infoValue: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  infoValueCode: {
+    color: '#00C896',
+    fontSize: 11,
+    fontWeight: 'bold',
+    fontFamily: 'monospace',
+    maxWidth: '55%',
+  },
+  textBusy: {
+    color: '#EF4444',
+  },
+  textFree: {
+    color: '#10B981',
+  },
+  noDriverText: {
+    color: '#94A3B8',
+    textAlign: 'center',
+    marginVertical: 20,
+  },
 });
 
 export default DriverHomeScreen;

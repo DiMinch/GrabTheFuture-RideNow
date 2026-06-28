@@ -14,6 +14,8 @@ interface DriverContextProps {
   distance: number;
   activeDriver: any;
   setActiveDriver: (driver: any) => void;
+  driversList: any[];
+  refreshDrivers: () => Promise<void>;
 }
 
 const DriverContext = createContext<DriverContextProps | undefined>(undefined);
@@ -24,6 +26,19 @@ export const DriverProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [currentRide, setCurrentRide] = useState<any>(null);
   const [distance, setDistance] = useState(150);
   const [activeDriver, setActiveDriver] = useState<any>(null);
+  const [driversList, setDriversList] = useState<any[]>([]);
+
+  const refreshDrivers = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/drivers`);
+      const result = await res.json();
+      if (result.success && Array.isArray(result.data)) {
+        setDriversList(result.data);
+      }
+    } catch (err) {
+      console.warn('[DriverContext] Error refreshing drivers:', err);
+    }
+  };
 
   // 1. Fetch active driver session from Firestore on mount
   useEffect(() => {
@@ -44,6 +59,7 @@ export const DriverProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }
 
         if (drivers.length > 0) {
+          setDriversList(drivers);
           // Find first available driver or default to first driver
           const chosen = drivers.find((d: any) => !d.busy) || drivers[0];
           console.log('[DriverContext] Selected active driver:', chosen);
@@ -143,6 +159,8 @@ export const DriverProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         distance,
         activeDriver,
         setActiveDriver,
+        driversList,
+        refreshDrivers,
       }}
     >
       {children}
