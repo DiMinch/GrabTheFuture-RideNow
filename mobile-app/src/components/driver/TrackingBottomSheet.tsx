@@ -31,6 +31,15 @@ interface Props {
   isTripPhase?: boolean;
 }
 
+const formatDistance = (meters: number): string => {
+  if (meters < 1000) {
+    return `${meters}m`;
+  }
+  const km = Math.floor(meters / 1000);
+  const m = meters % 1000;
+  return m > 0 ? `${km}km ${m}m` : `${km}km`;
+};
+
 const TrackingBottomSheet: React.FC<Props> = ({ 
   distance, 
   bleConnected, 
@@ -44,26 +53,38 @@ const TrackingBottomSheet: React.FC<Props> = ({
   const { t, lang } = useLang();
   const distancePercent = Math.max(0, (150 - distance) / 150);
   const progressWidth = width - 40;
+  const etaMinutes = Math.max(1, Math.ceil(distance / 50));
 
   return (
     <View style={styles.bottomSheet}>
       <View style={styles.progressTrack}>
         <Animated.View style={[styles.progressBar, { width: progressWidth * distancePercent }]} />
       </View>
-
+      
       <View style={styles.sheetHeader}>
         <View style={{ flex: 1, paddingRight: 8 }}>
           <Text style={styles.sheetTitle}>{isTripPhase ? t('headingToDestination') : t('enRoute')}</Text>
           <Text style={styles.sheetSubtitle} numberOfLines={1}>
             {isTripPhase 
-              ? `${dropoffAddress || 'Điểm đến'} · ${distance}m ${t('toDestination') || 'còn lại'}`
-              : `${pickupAddress || 'Vị trí điểm đón'} · ${distance}m ${t('distanceAway')}`
+              ? `${dropoffAddress || 'Điểm đến'} · ${formatDistance(distance)} ${t('toDestination') || 'còn lại'}`
+              : `${pickupAddress || 'Vị trí điểm đón'} · ${formatDistance(distance)} ${t('distanceAway')}`
             }
           </Text>
         </View>
         <View style={styles.etaBubble}>
-          <Text style={styles.etaValue}>{Math.max(1, Math.ceil(distance / 50))}</Text>
-          <Text style={styles.etaUnit}>{t('min')}</Text>
+          {etaMinutes < 60 ? (
+            <>
+              <Text style={styles.etaValue}>{etaMinutes}</Text>
+              <Text style={styles.etaUnit}>{t('min')}</Text>
+            </>
+          ) : (
+            <>
+              <Text style={[styles.etaValue, { fontSize: 15, lineHeight: 20 }]}>
+                {Math.floor(etaMinutes / 60)}h{etaMinutes % 60}m
+              </Text>
+              <Text style={styles.etaUnit}>{lang === 'vi' ? 't.gian' : 'time'}</Text>
+            </>
+          )}
         </View>
       </View>
 

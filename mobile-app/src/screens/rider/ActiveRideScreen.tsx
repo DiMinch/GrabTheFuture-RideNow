@@ -20,6 +20,24 @@ import { getBeaconColor } from '../../utils/beaconColor';
 // Khai báo kiểu Props cho màn hình này
 type Props = NativeStackScreenProps<RootStackParamList, 'ActiveRide'>;
 
+const formatDistance = (meters: number): string => {
+  if (meters < 1000) {
+    return `${meters}m`;
+  }
+  const km = Math.floor(meters / 1000);
+  const m = meters % 1000;
+  return m > 0 ? `${km}km ${m}m` : `${km}km`;
+};
+
+const formatDistanceSpeech = (meters: number): string => {
+  if (meters < 1000) {
+    return `${meters} mét`;
+  }
+  const km = Math.floor(meters / 1000);
+  const m = meters % 1000;
+  return m > 0 ? `${km} ki-lô-mét ${m} mét` : `${km} ki-lô-mét`;
+};
+
 export default function ActiveRideScreen({ route, navigation }: Props): React.JSX.Element {
   // Lấy ride_id (chính là bookingId) được truyền từ RiderHomeScreen sang
   const { ride_id } = route.params;
@@ -327,15 +345,14 @@ export default function ActiveRideScreen({ route, navigation }: Props): React.JS
       <Text style={styles.title} accessible accessibilityRole="header">
         Hành Trình Hiện Tại
       </Text>
-
       {booking && (normalizeBookingStatus(booking.status) === 'ACCEPTED' || normalizeBookingStatus(booking.status) === 'IN_PROGRESS') && (
         <View 
           style={styles.distanceContainer} 
           accessible={true} 
           accessibilityLabel={
             normalizeBookingStatus(booking.status) === 'IN_PROGRESS'
-              ? `Khoảng cách đến điểm trả còn ${distance} mét.`
-              : `Tài xế đang cách bạn ${distance} mét. Hướng phía trước bên phải.`
+              ? `Khoảng cách đến điểm trả còn ${formatDistanceSpeech(distance)}.`
+              : `Tài xế đang cách bạn ${formatDistanceSpeech(distance)}. Hướng phía trước bên phải.`
           }
         >
           <Text style={styles.distanceLabel}>
@@ -343,7 +360,7 @@ export default function ActiveRideScreen({ route, navigation }: Props): React.JS
               ? 'Khoảng cách đến điểm trả:'
               : 'Khoảng cách tài xế:'}
           </Text>
-          <Text style={styles.distanceValue}>{distance}m</Text>
+          <Text style={styles.distanceValue}>{formatDistance(distance)}</Text>
           {normalizeBookingStatus(booking.status) === 'ACCEPTED' && (
             <Text style={styles.directionText}>Hướng: Phía trước bên phải</Text>
           )}

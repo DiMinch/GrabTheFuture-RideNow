@@ -43,8 +43,8 @@ export default function App(): React.JSX.Element {
                 <DriverTrackingScreen
                   onConfirmPickup={() => {
                     Alert.alert(
-                      'Pickup Confirmed',
-                      'Passenger has been picked up. Starting navigation to destination.'
+                      'Hoàn tất chuyến đi',
+                      'Chuyến đi đã kết thúc thành công.'
                     );
                     navigation.navigate('DriverHome');
                   }}

@@ -64,7 +64,7 @@ const DriverTrackingScreen: React.FC<DriverTrackingScreenProps> = ({
   onConfirmPickup,
   driverId: driverIdProp,
 }) => {
-  const { driverLocation, distance, activeDriver, currentRide } = useDriver();
+  const { driverLocation, distance, activeDriver, currentRide, setCurrentRide } = useDriver();
   const driverId = driverIdProp || activeDriver?.id || DEFAULT_DRIVER_ID;
   const { lang } = useLang();
   const beaconColor = getBeaconColor(currentRide?.id || '');
@@ -368,6 +368,7 @@ const DriverTrackingScreen: React.FC<DriverTrackingScreenProps> = ({
                   status: 'COMPLETED',
                   driverId,
                 });
+                setCurrentRide(null); // Clear active ride locally immediately
                 if (onConfirmPickup) onConfirmPickup();
               }
             } catch (err) {
