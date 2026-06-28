@@ -1,12 +1,50 @@
 {
   "expo": {
+    "name": "GrabFuture RideNow",
+    "slug": "ridenow-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#1a2235"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "RideNow cần vị trí của bạn để hiển thị tài xế gần nhất và điều hướng chuyến đi.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "RideNow cần vị trí của bạn khi đang chạy nền để theo dõi chuyến đi."
+      }
+    },
+    "android": {
+      "package": "com.diminch.ridenowmobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#1a2235"
+      },
+      "permissions": [
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "YOUR_GOOGLE_MAPS_API_KEY"
+        }
+      }
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "RideNow cần vị trí của bạn để điều hướng chuyến đi."
+        }
+      ]
+    ],
     "extra": {
       "eas": {
         "projectId": "1c72bc51-904d-4ca9-9d42-b864703d9b90"
       }
     },
-    "android": {
-      "package": "com.diminch.ridenowmobile"
-    }
+    "sdkVersion": "54.0.0"
   }
 }
