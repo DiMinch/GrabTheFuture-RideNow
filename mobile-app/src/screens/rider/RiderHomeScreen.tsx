@@ -226,7 +226,11 @@ export default function RiderHomeScreen({ navigation }: RiderHomeScreenProps): R
       if (message.type === 'action_result' && message.tool === 'geocode_address') {
         const result = message.result as any;
         if (result && result.display_name) {
-          const displayName = result.display_name.split(',')[0] || result.display_name;
+          const parts = result.display_name.split(',').map((p: string) => p.trim());
+          // Lấy tối đa 3 thành phần địa chỉ chi tiết đầu tiên (ví dụ: Chợ Bến Thành, Đường Lê Lợi, Quận 1)
+          const displayName = parts.length > 1 
+            ? parts.slice(0, Math.min(3, parts.length)).join(', ') 
+            : result.display_name;
           setResolvedDestination(displayName);
           setResolvedDropoffLocation({
             latitude: result.lat || 10.864319,
