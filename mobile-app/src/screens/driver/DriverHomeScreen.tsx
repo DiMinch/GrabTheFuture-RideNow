@@ -294,7 +294,6 @@ const styles = StyleSheet.create({
     left: 60,
   },
   carIcon: {
-    position: 'absolute',
     width: 24,
     height: 24,
     borderRadius: 12,
@@ -305,8 +304,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
-    top: 68, // (160 - 24) / 2
-    left: 68,
   },
   modalOverlay: {
     flex: 1,
