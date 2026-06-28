@@ -58,12 +58,16 @@ class FallbackAgentService:
         if not self.audio_buffer:
             return {"error": "Empty audio buffer"}
 
-        # Convert accumulated PCM to standard WAV bytes
-        wav_bytes = self._convert_pcm_to_wav()
+        mime_type = self.context.get("mimeType", "audio/wav")
+        if mime_type == "audio/pcm" or (mime_type == "audio/wav" and not self.audio_buffer.startswith(b'RIFF')):
+            audio_bytes = self._convert_pcm_to_wav()
+        else:
+            audio_bytes = bytes(self.audio_buffer)
+
         self.clear_buffer() # Reset buffer for next turn
 
         # Base64 encode WAV for Gemini API payload
-        wav_b64 = base64.b64encode(wav_bytes).decode("utf-8")
+        wav_b64 = base64.b64encode(audio_bytes).decode("utf-8")
 
         # Get system instructions based on language & coordinates
         lang = self.context.get("lang", "vi")
@@ -115,7 +119,7 @@ class FallbackAgentService:
                     "parts": [
                         {
                             "inlineData": {
-                                "mimeType": "audio/wav",
+                                "mimeType": mime_type if mime_type != "audio/pcm" else "audio/wav",
                                 "data": wav_b64
                             }
                         },

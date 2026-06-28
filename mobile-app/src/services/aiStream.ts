@@ -13,6 +13,7 @@ export type AiStreamSessionContextMessage = {
   latitude?: number;
   longitude?: number;
   lang?: AiStreamLanguage;
+  mimeType?: string;
 };
 
 export type AiStreamAudioChunkMessage = {

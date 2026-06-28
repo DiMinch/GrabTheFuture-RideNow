@@ -7,6 +7,8 @@ import {
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import * as Speech from 'expo-speech';
+import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system';
 import { AiStreamClient, type AiStreamIncomingMessage } from '../../services/aiStream';
 import { API_BASE_URL, AI_GATEWAY_WS_URL } from '../../config';
 
@@ -99,6 +101,58 @@ export default function RiderHomeScreen({ navigation }: RiderHomeScreenProps): R
 
   const lastTapRef = useRef<number>(0);
   const tapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recordingRef = useRef<Audio.Recording | null>(null);
+
+  const startRecording = async () => {
+    try {
+      const perm = await Audio.requestPermissionsAsync();
+      if (perm.status !== 'granted') {
+        console.warn('Microphone permission not granted');
+        return;
+      }
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+      recordingRef.current = recording;
+      console.log('[RiderHome] Audio recording started');
+    } catch (err) {
+      console.error('[RiderHome] Failed to start recording', err);
+    }
+  };
+
+  const stopAndGetAudioBase64 = async (): Promise<string | null> => {
+    try {
+      const recording = recordingRef.current;
+      if (!recording) return null;
+
+      console.log('[RiderHome] Stopping recording...');
+      await recording.stopAndUnloadAsync();
+      const uri = recording.getURI();
+      recordingRef.current = null;
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+      });
+
+      if (!uri) return null;
+      console.log('[RiderHome] Audio file saved:', uri);
+
+      const base64Content = await FileSystem.readAsStringAsync(uri, {
+        encoding: 'base64',
+      });
+      return base64Content;
+    } catch (err) {
+      console.error('[RiderHome] Failed to stop recording', err);
+      return null;
+    }
+  };
 
   const [resolvedDestination, setResolvedDestination] = useState<string>(BOOKING_DESTINATION);
   const [resolvedDropoffLocation, setResolvedDropoffLocation] = useState<{ latitude: number; longitude: number }>({
@@ -124,6 +178,10 @@ export default function RiderHomeScreen({ navigation }: RiderHomeScreenProps): R
     (message: AiStreamIncomingMessage) => {
       if (message.type === 'error') {
         setAiStreamStatus('error');
+        if (isMountedRef.current) {
+          setPhase('IDLE');
+        }
+        void speakAsync('Đã xảy ra lỗi kết nối. Vui lòng thử lại.');
         return;
       }
 
@@ -133,6 +191,10 @@ export default function RiderHomeScreen({ navigation }: RiderHomeScreenProps): R
       }
 
       if (message.type === 'fallback_response' && typeof message.text_response === 'string') {
+        if (isMountedRef.current) {
+          setPhase('IDLE');
+          aiStreamRef.current?.close();
+        }
         void speakAsync(message.text_response);
         return;
       }
@@ -199,6 +261,7 @@ export default function RiderHomeScreen({ navigation }: RiderHomeScreenProps): R
             latitude: RIDER_LOCATION.latitude,
             longitude: RIDER_LOCATION.longitude,
             lang: 'vi',
+            mimeType: 'audio/m4a',
           });
         },
         onMessage: handleAiStreamMessage,
@@ -232,10 +295,7 @@ export default function RiderHomeScreen({ navigation }: RiderHomeScreenProps): R
         try {
           await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
           startAiStream();
-          
-          // SỬA Ở ĐÂY: Thay mockPost bằng delay để giả lập khởi động ghi âm giọng nói
-          await delay(500); 
-          
+          await startRecording();
         } finally {
           isBusyRef.current = false;
         }
@@ -245,12 +305,25 @@ export default function RiderHomeScreen({ navigation }: RiderHomeScreenProps): R
 
       if (phase === 'LISTENING') {
         isBusyRef.current = true;
-        setPhase('CONFIRMING');
+        setPhase('PROCESSING');
 
         try {
-          aiStreamRef.current?.close();
           await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-          await speakAsync(`Xác nhận điểm đến: ${resolvedDestination}. Chạm nhanh hai lần liên tiếp vào màn hình để đặt xe, hoặc chạm một lần để hủy.`);
+          await speakAsync('Đang phân tích giọng nói của bạn...');
+
+          const base64Audio = await stopAndGetAudioBase64();
+          if (base64Audio && aiStreamRef.current) {
+            aiStreamRef.current.sendAudioChunk(base64Audio);
+            aiStreamRef.current.sendAudioEnd();
+          } else {
+            console.warn('[RiderHome] No audio captured or stream is closed.');
+            setPhase('IDLE');
+            await speakAsync('Không nhận diện được giọng nói, vui lòng chạm để thử lại.');
+          }
+        } catch (err) {
+          console.error('[RiderHome] Error processing audio:', err);
+          setPhase('IDLE');
+          await speakAsync('Không nhận diện được giọng nói, vui lòng chạm để thử lại.');
         } finally {
           isBusyRef.current = false;
         }
@@ -320,7 +393,7 @@ export default function RiderHomeScreen({ navigation }: RiderHomeScreenProps): R
         }
       }
     },
-    [navigation, phase, startAiStream, resolvedDestination, resolvedDropoffLocation],
+    [navigation, phase, startAiStream, resolvedDestination, resolvedDropoffLocation, startRecording, stopAndGetAudioBase64],
   );
 
   const accessibilityLabel =

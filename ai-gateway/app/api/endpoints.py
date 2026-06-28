@@ -110,6 +110,7 @@ async def voice_stream_websocket(
                     new_lat = message.get("latitude")
                     new_lng = message.get("longitude")
                     new_lang = message.get("lang")
+                    new_mime = message.get("mimeType")
                     if new_lat and new_lng:
                         fallback_service.context["latitude"] = new_lat
                         fallback_service.context["longitude"] = new_lng
@@ -117,6 +118,8 @@ async def voice_stream_websocket(
                     if new_lang:
                         fallback_service.context["lang"] = new_lang
                         session_manager.update_language(session_id, new_lang)
+                    if new_mime:
+                        fallback_service.context["mimeType"] = new_mime
 
                 elif msg_type == "audio_chunk" or msg_type == "audio":
                     audio_data = message.get("data")
