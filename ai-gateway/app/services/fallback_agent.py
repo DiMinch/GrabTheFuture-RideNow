@@ -17,7 +17,9 @@ class FallbackAgentService:
     def __init__(self, api_key: str, context: dict = None):
         self.api_key = api_key
         self.context = context or {}
-        self.model_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+        # Dùng model cấu hình động từ settings để tránh lỗi không tìm thấy model
+        model_name = settings.GEMINI_MODEL
+        self.model_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
         
         # Audio accumulator for raw PCM bytes (from Mobile client)
         self.audio_buffer = bytearray()
