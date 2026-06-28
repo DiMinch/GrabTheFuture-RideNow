@@ -147,9 +147,13 @@ const styles = StyleSheet.create({
     height: 46,
     borderRadius: 23,
     backgroundColor: ACCENT,
+    top: 37, // (120 - 46) / 2 to center perfectly
+    left: 37,
   },
   carIcon: {
-    width: 24, height: 24,
+    position: 'absolute',
+    width: 24,
+    height: 24,
     borderRadius: 12,
     backgroundColor: '#fff',
     borderWidth: 2,
@@ -158,6 +162,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
+    top: 48, // (120 - 24) / 2 to center perfectly
+    left: 48,
   }
 });
 
