@@ -10,6 +10,7 @@ import { useLang } from '../../context/LanguageContext';
 import { updateDriverLocation } from '../../services/drivers';
 import { updateBookingStatus } from '../../services/bookings';
 import { API_BASE_URL } from '../../config';
+import { getBeaconColor } from '../../utils/beaconColor';
 
 interface DriverTrackingScreenProps {
   onConfirmPickup?: () => void;
@@ -66,6 +67,7 @@ const DriverTrackingScreen: React.FC<DriverTrackingScreenProps> = ({
   const { driverLocation, distance, activeDriver, currentRide } = useDriver();
   const driverId = driverIdProp || activeDriver?.id || DEFAULT_DRIVER_ID;
   const { lang } = useLang();
+  const beaconColor = getBeaconColor(currentRide?.id || '');
   const mapRef = useRef<MapView>(null);
   
   const [mapReady, setMapReady] = useState(false);
@@ -109,7 +111,10 @@ const DriverTrackingScreen: React.FC<DriverTrackingScreenProps> = ({
       showAlert(isVi ? 'Hành khách cách 50 mét bên phải' : 'Passenger 50 meters on the right');
     } else if (distance <= 20 && distance > 10 && !alertFlags.alert20) {
       setAlertFlags(prev => ({ ...prev, alert20: true }));
-      showAlert(isVi ? 'Hành khách đang phát đèn flash và rung điện thoại' : 'Passenger is flashing and vibrating');
+      showAlert(isVi 
+        ? `Hành khách đang nháy màn hình màu ${beaconColor.name} và rung điện thoại` 
+        : `Passenger is flashing ${beaconColor.nameEn} light and vibrating`
+      );
     } else if (distance <= 10 && distance > 5 && !alertFlags.alert10 && !bleConnected) {
       setAlertFlags(prev => ({ ...prev, alert10: true }));
       setBleConnected(true);
@@ -119,7 +124,7 @@ const DriverTrackingScreen: React.FC<DriverTrackingScreenProps> = ({
       setPassengerSignaled(true);
       showAlert(isVi ? 'Hành khách đã gõ 2 lần · Sẵn sàng đón ✅' : 'Passenger tapped · Ready for pickup ✅');
     }
-  }, [distance, lang, bleConnected, passengerSignaled, alertFlags]);
+  }, [distance, lang, bleConnected, passengerSignaled, alertFlags, beaconColor.name, beaconColor.nameEn]);
 
   // GPS background tracking and API syncing effect
   useEffect(() => {
@@ -322,6 +327,7 @@ const DriverTrackingScreen: React.FC<DriverTrackingScreenProps> = ({
         distance={distance}
         bleConnected={bleConnected}
         passengerSignaled={passengerSignaled}
+        beaconColor={beaconColor}
         onConfirmPickup={async () => {
           if (currentRide?.id && driverId) {
             try {

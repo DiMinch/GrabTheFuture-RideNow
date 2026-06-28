@@ -15,6 +15,7 @@ import BleHandshakeOverlay from '../../components/rider/BleHandshakeOverlay';
 import { getBookingStatusText, getNextBookingStatus, normalizeBookingStatus } from '../../utils/bookingStatus';
 import { updateBookingStatus } from '../../services/bookings';
 import { API_BASE_URL } from '../../config';
+import { getBeaconColor } from '../../utils/beaconColor';
 
 // Khai báo kiểu Props cho màn hình này
 type Props = NativeStackScreenProps<RootStackParamList, 'ActiveRide'>;
@@ -22,6 +23,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'ActiveRide'>;
 export default function ActiveRideScreen({ route, navigation }: Props): React.JSX.Element {
   // Lấy ride_id (chính là bookingId) được truyền từ RiderHomeScreen sang
   const { ride_id } = route.params;
+  const beaconColor = getBeaconColor(ride_id);
 
   // Khởi tạo các state
   const [booking, setBooking] = useState<Booking | null>(null);
@@ -89,7 +91,7 @@ export default function ActiveRideScreen({ route, navigation }: Props): React.JS
     } else if (distance === 50) {
       speechText = 'Tài xế đang cách bạn năm mươi mét.';
     } else if (distance === 20) {
-      speechText = 'Tài xế cách bạn hai mươi mét. Kích hoạt radar rung và nháy đèn flash để tài xế nhận diện.';
+      speechText = `Tài xế cách bạn hai mươi mét. Kích hoạt radar rung và nháy màn hình màu ${beaconColor.name} để tài xế nhận diện.`;
     } else if (distance === 5) {
       speechText = 'Tài xế đã đến gần dưới năm mét. Bắt đầu xác thực BLE Handshake.';
       setShowBleOverlay(true);
@@ -98,7 +100,7 @@ export default function ActiveRideScreen({ route, navigation }: Props): React.JS
     if (speechText) {
       void Speech.speak(speechText, { language: 'vi-VN' });
     }
-  }, [distance, booking?.status]);
+  }, [distance, booking?.status, beaconColor.name]);
 
   // Haptic Radar + Flash Beacon (20m -> 5m)
   useEffect(() => {
@@ -340,7 +342,7 @@ export default function ActiveRideScreen({ route, navigation }: Props): React.JS
 
       {/* Flash Beacon simulation overlay */}
       {isScreenFlashing && (
-        <View style={styles.flashOverlay} pointerEvents="none" />
+        <View style={[styles.flashOverlay, { backgroundColor: beaconColor.hex }]} pointerEvents="none" />
       )}
 
       {/* BLE Handshake overlay */}

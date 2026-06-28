@@ -25,10 +25,11 @@ interface Props {
   bleConnected: boolean;
   passengerSignaled: boolean;
   onConfirmPickup: () => void;
+  beaconColor?: any;
 }
 
-const TrackingBottomSheet: React.FC<Props> = ({ distance, bleConnected, passengerSignaled, onConfirmPickup }) => {
-  const { t } = useLang();
+const TrackingBottomSheet: React.FC<Props> = ({ distance, bleConnected, passengerSignaled, onConfirmPickup, beaconColor }) => {
+  const { t, lang } = useLang();
   const distancePercent = Math.max(0, (150 - distance) / 150);
   const progressWidth = width - 40;
 
@@ -53,7 +54,15 @@ const TrackingBottomSheet: React.FC<Props> = ({ distance, bleConnected, passenge
 
       <View style={styles.statusSection}>
         <StatusIndicator icon="🔊" label={t('ttaLabel')} status={t('ttaStatus')} active={true} />
-        <StatusIndicator icon="💡" label={t('flashLabel')} status={distance <= 20 ? t('flashDetected') : t('flashWaiting')} active={distance <= 20} />
+        <StatusIndicator 
+          icon="💡" 
+          label={t('flashLabel')} 
+          status={distance <= 20 
+            ? (beaconColor ? `${t('flashDetected')} (${lang === 'vi' ? beaconColor.name : beaconColor.nameEn})` : t('flashDetected'))
+            : t('flashWaiting')
+          } 
+          active={distance <= 20} 
+        />
         <StatusIndicator icon="📡" label={t('bleLabel')} status={bleConnected ? t('bleSuccess') : t('bleScanning')} active={bleConnected} />
         <StatusIndicator icon="📲" label={t('tapLabel')} status={passengerSignaled ? t('tapReady') : t('tapWaiting')} active={passengerSignaled} />
       </View>
