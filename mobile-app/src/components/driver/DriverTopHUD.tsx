@@ -14,21 +14,10 @@ const DriverTopHUD = () => {
 
   return (
     <View style={styles.topHUD}>
-      <TouchableOpacity 
-        style={styles.onlineBadge}
-        activeOpacity={0.8}
-        onPress={() => {
-          // Nút ẩn dùng để debug (giả lập server gửi cuốc xe mới)
-          setCurrentRide({
-            id: 'mock_ride_123',
-            passengerName: 'Nguyễn Văn A',
-            pickup: '235 Nguyễn Văn Cừ, Q.5'
-          });
-        }}
-      >
+      <View style={styles.onlineBadge}>
         <View style={[styles.onlineDot, { backgroundColor: isOnline ? '#00E676' : '#FF1744' }]} />
         <Text style={styles.onlineBadgeText}>{isOnline ? t('online') : t('offline')}</Text>
-      </TouchableOpacity>
+      </View>
       <View style={styles.earningsCard}>
         <Text style={styles.earningsLabel}>{t('today')}</Text>
         <Text style={styles.earningsValue}>{earnings.today}</Text>
