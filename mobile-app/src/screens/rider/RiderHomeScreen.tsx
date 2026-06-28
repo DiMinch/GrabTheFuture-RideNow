@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import * as ExpoLocation from 'expo-location';
 import {
   GestureResponderEvent,
   StyleSheet,
@@ -39,7 +40,8 @@ const VOICE_PROMPTS = {
 
 const BOOKING_DESTINATION = 'Bến xe Miền Đông Mới';
 const RIDER_ID = 'mock-user-123';
-const RIDER_LOCATION = { latitude: 10.762622, longitude: 106.660172 };
+// Fallback nếu không lấy được GPS thật
+const DEFAULT_RIDER_LOCATION = { latitude: 10.762622, longitude: 106.660172 };
 
 // Cấu trúc dữ liệu gửi đi (Request Body) theo chuẩn OpenAPI
 interface BookingRequest {
@@ -95,6 +97,7 @@ async function createBooking(payload: BookingRequest) {
 export default function RiderHomeScreen({ navigation }: RiderHomeScreenProps): React.JSX.Element {
   const [phase, setPhase] = useState<VoicePhase>('IDLE');
   const [aiStreamStatus, setAiStreamStatus] = useState<AiStreamStatus>('idle');
+  const [riderLocation, setRiderLocation] = useState(DEFAULT_RIDER_LOCATION);
   const isMountedRef = useRef(true);
   const isBusyRef = useRef(false);
   const aiStreamRef = useRef<AiStreamClient | null>(null);
@@ -102,6 +105,27 @@ export default function RiderHomeScreen({ navigation }: RiderHomeScreenProps): R
   const lastTapRef = useRef<number>(0);
   const tapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recordingRef = useRef<Audio.Recording | null>(null);
+
+  // Lấy GPS thật của rider khi mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const { status } = await ExpoLocation.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          console.warn('[RiderHome] Location permission denied, using default location');
+          return;
+        }
+        const loc = await ExpoLocation.getCurrentPositionAsync({
+          accuracy: ExpoLocation.Accuracy.Balanced,
+        });
+        const realCoord = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+        console.log('[RiderHome] Got real GPS location:', realCoord);
+        setRiderLocation(realCoord);
+      } catch (err) {
+        console.warn('[RiderHome] Failed to get GPS, using default:', err);
+      }
+    })();
+  }, []);
 
   const startRecording = async () => {
     try {
@@ -245,8 +269,8 @@ export default function RiderHomeScreen({ navigation }: RiderHomeScreenProps): R
       AI_GATEWAY_WS_URL,
       {
         sessionId,
-        lat: RIDER_LOCATION.latitude,
-        lng: RIDER_LOCATION.longitude,
+        lat: riderLocation.latitude,
+        lng: riderLocation.longitude,
         userId: RIDER_ID,
         lang: 'vi',
       },
@@ -258,8 +282,8 @@ export default function RiderHomeScreen({ navigation }: RiderHomeScreenProps): R
 
           setAiStreamStatus('connected');
           aiStream.sendSessionContext({
-            latitude: RIDER_LOCATION.latitude,
-            longitude: RIDER_LOCATION.longitude,
+            latitude: riderLocation.latitude,
+            longitude: riderLocation.longitude,
             lang: 'vi',
             mimeType: 'audio/m4a',
           });
@@ -350,7 +374,7 @@ export default function RiderHomeScreen({ navigation }: RiderHomeScreenProps): R
             
             // Gọi API backend thật
             const bookingResponse = await createBooking({
-              pickupLocation: RIDER_LOCATION,
+              pickupLocation: riderLocation,
               dropoffLocation: resolvedDropoffLocation,
               pickupAddress: "Vị trí hiện tại của bạn",
               dropoffAddress: resolvedDestination,

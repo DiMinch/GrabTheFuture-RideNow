@@ -31,7 +31,7 @@ router.get('/', async (req: Request, res: Response) => {
 
 router.post('/', async (req: Request, res: Response) => {
     try {
-        const { riderId, pickupLocation, dropoffLocation, accessibilityMode } = req.body;
+        const { riderId, pickupLocation, dropoffLocation, accessibilityMode, pickupAddress, dropoffAddress } = req.body;
         console.log('[Backend] Received booking request body:', JSON.stringify(req.body));
 
         // 1. Lấy danh sách tài xế đang rảnh từ Firestore
@@ -61,6 +61,8 @@ router.post('/', async (req: Request, res: Response) => {
             riderId: riderId || 'mock-user-123',
             pickupLocation,
             dropoffLocation,
+            pickupAddress: pickupAddress || 'Vị trí hiện tại',
+            dropoffAddress: dropoffAddress || 'Điểm đến',
             accessibilityMode: accessibilityMode !== false,
             status: 'pending',
             driverId: bestDriver.id,

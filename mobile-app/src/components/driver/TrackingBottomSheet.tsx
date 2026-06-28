@@ -26,9 +26,21 @@ interface Props {
   passengerSignaled: boolean;
   onConfirmPickup: () => void;
   beaconColor?: any;
+  pickupAddress?: string;
+  dropoffAddress?: string;
+  isTripPhase?: boolean;
 }
 
-const TrackingBottomSheet: React.FC<Props> = ({ distance, bleConnected, passengerSignaled, onConfirmPickup, beaconColor }) => {
+const TrackingBottomSheet: React.FC<Props> = ({ 
+  distance, 
+  bleConnected, 
+  passengerSignaled, 
+  onConfirmPickup, 
+  beaconColor, 
+  pickupAddress,
+  dropoffAddress,
+  isTripPhase = false
+}) => {
   const { t, lang } = useLang();
   const distancePercent = Math.max(0, (150 - distance) / 150);
   const progressWidth = width - 40;
@@ -40,9 +52,14 @@ const TrackingBottomSheet: React.FC<Props> = ({ distance, bleConnected, passenge
       </View>
 
       <View style={styles.sheetHeader}>
-        <View>
-          <Text style={styles.sheetTitle}>{t('enRoute')}</Text>
-          <Text style={styles.sheetSubtitle}>Nguyễn Văn Cừ, Q.5 · {distance}m {t('distanceAway')}</Text>
+        <View style={{ flex: 1, paddingRight: 8 }}>
+          <Text style={styles.sheetTitle}>{isTripPhase ? t('headingToDestination') : t('enRoute')}</Text>
+          <Text style={styles.sheetSubtitle} numberOfLines={1}>
+            {isTripPhase 
+              ? `${dropoffAddress || 'Điểm đến'} · ${distance}m ${t('toDestination') || 'còn lại'}`
+              : `${pickupAddress || 'Vị trí điểm đón'} · ${distance}m ${t('distanceAway')}`
+            }
+          </Text>
         </View>
         <View style={styles.etaBubble}>
           <Text style={styles.etaValue}>{Math.max(1, Math.ceil(distance / 50))}</Text>
@@ -57,25 +74,37 @@ const TrackingBottomSheet: React.FC<Props> = ({ distance, bleConnected, passenge
         <StatusIndicator 
           icon="💡" 
           label={t('flashLabel')} 
-          status={distance <= 20 
+          status={isTripPhase || distance <= 20 
             ? (beaconColor ? `${t('flashDetected')} (${lang === 'vi' ? beaconColor.name : beaconColor.nameEn})` : t('flashDetected'))
             : t('flashWaiting')
           } 
-          active={distance <= 20} 
+          active={isTripPhase || distance <= 20} 
         />
-        <StatusIndicator icon="📡" label={t('bleLabel')} status={bleConnected ? t('bleSuccess') : t('bleScanning')} active={bleConnected} />
-        <StatusIndicator icon="📲" label={t('tapLabel')} status={passengerSignaled ? t('tapReady') : t('tapWaiting')} active={passengerSignaled} />
+        <StatusIndicator 
+          icon="📡" 
+          label={t('bleLabel')} 
+          status={isTripPhase || bleConnected ? t('bleSuccess') : t('bleScanning')} 
+          active={isTripPhase || bleConnected} 
+        />
+        <StatusIndicator 
+          icon="📲" 
+          label={t('tapLabel')} 
+          status={isTripPhase || passengerSignaled ? t('tapReady') : t('tapWaiting')} 
+          active={isTripPhase || passengerSignaled} 
+        />
       </View>
 
       <TouchableOpacity
-        style={[styles.confirmButton, { opacity: passengerSignaled ? 1 : 0.45 }]}
+        style={[styles.confirmButton, { opacity: (isTripPhase || passengerSignaled) ? 1 : 0.45 }]}
         onPress={onConfirmPickup}
-        disabled={!passengerSignaled}
+        disabled={!isTripPhase && !passengerSignaled}
         activeOpacity={0.85}
       >
-        <Text style={styles.confirmButtonIcon}>{passengerSignaled ? '✓' : '⏳'}</Text>
+        <Text style={styles.confirmButtonIcon}>{(isTripPhase || passengerSignaled) ? '✓' : '⏳'}</Text>
         <Text style={styles.confirmButtonText}>
-          {passengerSignaled ? t('confirmPickup') : t('waitingPassenger')}
+          {isTripPhase 
+            ? (t('confirmDropoff') || 'XÁC NHẬN TRẢ KHÁCH') 
+            : (passengerSignaled ? t('confirmPickup') : t('waitingPassenger'))}
         </Text>
       </TouchableOpacity>
     </View>

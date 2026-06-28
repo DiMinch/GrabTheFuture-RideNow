@@ -50,6 +50,9 @@ export const translations = {
     confirmPickup: 'CONFIRM PICKUP',
     waitingPassenger: 'WAITING FOR PASSENGER',
     min: 'min',
+    headingToDestination: 'Driving to Destination',
+    toDestination: 'to destination',
+    confirmDropoff: 'CONFIRM DROPOFF',
 
     // RiderHome
     riderIdle: 'Tap the screen to give a voice command.',
@@ -107,6 +110,9 @@ export const translations = {
     confirmPickup: 'XÁC NHẬN ĐÓN KHÁCH',
     waitingPassenger: 'ĐANG CHỜ HÀNH KHÁCH',
     min: 'phút',
+    headingToDestination: 'Đang đến điểm trả',
+    toDestination: 'đến điểm trả',
+    confirmDropoff: 'XÁC NHẬN TRẢ KHÁCH',
 
     // RiderHome
     riderIdle: 'Chạm vào màn hình để ra lệnh giọng nói.',

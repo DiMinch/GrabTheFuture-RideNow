@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, StatusBar, useColorScheme } from 'react-native'
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { LangToggleButton } from '../../context/LanguageContext';
-import { useDriver, PASSENGER_COORD } from '../../context/DriverContext';
+import { useDriver } from '../../context/DriverContext';
 import TrackingBottomSheet from '../../components/driver/TrackingBottomSheet';
 import TrackingAlertBanner from '../../components/driver/TrackingAlertBanner';
 import { useLang } from '../../context/LanguageContext';
@@ -70,6 +70,18 @@ const DriverTrackingScreen: React.FC<DriverTrackingScreenProps> = ({
   const beaconColor = getBeaconColor(currentRide?.id || '');
   const mapRef = useRef<MapView>(null);
   
+  // Tọa độ điểm đón lấy từ booking, không dùng hardcode nữa
+  const passengerCoord = currentRide?.pickupLocation
+    ? { latitude: currentRide.pickupLocation.latitude, longitude: currentRide.pickupLocation.longitude }
+    : (driverLocation || { latitude: 10.8756, longitude: 106.8007 });
+
+  const isTripPhase = currentRide?.status?.toUpperCase() === 'IN_PROGRESS';
+  const targetCoord = isTripPhase 
+    ? (currentRide?.dropoffLocation 
+        ? { latitude: currentRide.dropoffLocation.latitude, longitude: currentRide.dropoffLocation.longitude }
+        : passengerCoord)
+    : passengerCoord;
+  
   const [mapReady, setMapReady] = useState(false);
   const [bleConnected, setBleConnected] = useState(false);
   const [passengerSignaled, setPassengerSignaled] = useState(false);
@@ -88,12 +100,12 @@ const DriverTrackingScreen: React.FC<DriverTrackingScreenProps> = ({
     if (driverLocation && mapReady) {
       setTimeout(() => {
         mapRef.current?.fitToCoordinates(
-          [driverLocation, PASSENGER_COORD],
+          [driverLocation, targetCoord],
           { edgePadding: { top: 120, right: 60, bottom: 380, left: 60 }, animated: true }
         );
       }, 400);
     }
-  }, [driverLocation, mapReady]);
+  }, [driverLocation, mapReady, targetCoord]);
 
   const showAlert = (msg: string) => {
     setCurrentAlert(msg);
@@ -283,16 +295,26 @@ const DriverTrackingScreen: React.FC<DriverTrackingScreenProps> = ({
           </Marker>
         )}
 
-        <Marker coordinate={PASSENGER_COORD} anchor={{ x: 0.5, y: 1 }}>
+        {/* Điểm đón (Pickup Marker) - Hiển thị màu xám nhỏ hơn khi hành trình bắt đầu */}
+        <Marker coordinate={passengerCoord} anchor={{ x: 0.5, y: 1 }}>
           <View style={styles.passengerMarkerContainer}>
-            <View style={styles.passengerMarker} />
+            <View style={[styles.passengerMarker, isTripPhase && { backgroundColor: '#64748B', transform: [{ scale: 0.8 }] }]} />
           </View>
         </Marker>
 
+        {/* Điểm trả (Dropoff Marker) - Chỉ hiển thị khi đang thực hiện chuyến đi */}
+        {isTripPhase && (
+          <Marker coordinate={targetCoord} anchor={{ x: 0.5, y: 1 }}>
+            <View style={styles.passengerMarkerContainer}>
+              <View style={[styles.passengerMarker, { backgroundColor: '#EF4444' }]} />
+            </View>
+          </Marker>
+        )}
+
         {driverLocation && (
           <Polyline
-            coordinates={[driverLocation, PASSENGER_COORD]}
-            strokeColor="#00C896"
+            coordinates={[driverLocation, targetCoord]}
+            strokeColor={isTripPhase ? '#F59E0B' : '#00C896'}
             strokeWidth={4}
             lineDashPattern={[8, 4]}
           />
@@ -328,18 +350,30 @@ const DriverTrackingScreen: React.FC<DriverTrackingScreenProps> = ({
         bleConnected={bleConnected}
         passengerSignaled={passengerSignaled}
         beaconColor={beaconColor}
+        pickupAddress={currentRide?.pickupAddress}
+        dropoffAddress={currentRide?.dropoffAddress}
+        isTripPhase={isTripPhase}
         onConfirmPickup={async () => {
           if (currentRide?.id && driverId) {
             try {
-              await updateBookingStatus(API_BASE_URL, currentRide.id, {
-                status: 'COMPLETED',
-                driverId,
-              });
+              if (!isTripPhase) {
+                // Đón khách -> Đổi trạng thái sang IN_PROGRESS
+                await updateBookingStatus(API_BASE_URL, currentRide.id, {
+                  status: 'IN_PROGRESS',
+                  driverId,
+                });
+              } else {
+                // Trả khách -> Đổi trạng thái sang COMPLETED
+                await updateBookingStatus(API_BASE_URL, currentRide.id, {
+                  status: 'COMPLETED',
+                  driverId,
+                });
+                if (onConfirmPickup) onConfirmPickup();
+              }
             } catch (err) {
-              console.error('[DriverTrackingScreen] Failed to complete booking:', err);
+              console.error('[DriverTrackingScreen] Failed to update booking status:', err);
             }
           }
-          if (onConfirmPickup) onConfirmPickup();
         }}
       />
     </View>

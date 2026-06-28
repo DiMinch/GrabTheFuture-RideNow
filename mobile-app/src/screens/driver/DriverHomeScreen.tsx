@@ -94,6 +94,7 @@ const DriverHomeScreen: React.FC<DriverHomeScreenProps> = ({ onAcceptRide, onRej
 
       <RideRequestSheet 
         isVisible={!!currentRide} 
+        booking={currentRide}
         onAccept={async () => {
           if (currentRide?.id && activeDriver?.id) {
             try {

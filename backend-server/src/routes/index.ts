@@ -41,7 +41,10 @@ router.post('/drivers/location', async (req: Request, res: Response) => {
     // 2. Tìm tất cả cuốc xe đang chạy của tài xế này để cập nhật tọa độ GPS realtime vào Booking doc
     const activeBookingsSnapshot = await getDb().collection('bookings')
       .where('driverId', '==', driverId)
-      .where('status', 'in', ['pending', 'accepted', 'in_progress'])
+      .where('status', 'in', [
+        'pending', 'accepted', 'in_progress', 'arrived',
+        'PENDING', 'ACCEPTED', 'IN_PROGRESS', 'ARRIVED'
+      ])
       .get();
 
     if (!activeBookingsSnapshot.empty) {

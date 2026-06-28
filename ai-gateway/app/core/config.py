@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     PORT: int = 8000
     HOST: str = "0.0.0.0"
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-3.5-flash"
+    GEMINI_MODEL: str = "gemini-3.1-flash-live-preview"
     BACKEND_SERVER_URL: str = "http://localhost:5000/api"
     USE_FALLBACK_AGENT: bool = False
     GEOVINA_API_KEY: str = ""

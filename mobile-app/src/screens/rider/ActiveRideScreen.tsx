@@ -50,16 +50,34 @@ export default function ActiveRideScreen({ route, navigation }: Props): React.JS
     };
   }, [ride_id]);
 
-  // Vòng lặp giả lập hành trình (Simulation Loop)
+  // Vòng lặp giả lập hành trình & tính khoảng cách động (Simulation Loop & Dynamic Distance)
   useEffect(() => {
-    if (!booking || normalizeBookingStatus(booking.status) !== 'ACCEPTED') {
+    const status = normalizeBookingStatus(booking?.status || '');
+    if (!booking || (status !== 'ACCEPTED' && status !== 'IN_PROGRESS')) {
       setDistance(120);
       setShowBleOverlay(false);
       setIsScreenFlashing(false);
       return;
     }
 
-    // Tài xế đã nhận chuyến: Giảm khoảng cách để test flow
+    // Nếu đã có tọa độ tài xế live từ server, ta dùng tọa độ đó tính khoảng cách động thực tế
+    if (booking.driver?.lat && booking.driver?.lng) {
+      import('geolib').then(({ getDistance }) => {
+        try {
+          const target = status === 'IN_PROGRESS' ? booking.dropoffLocation : booking.pickupLocation;
+          const d = getDistance(
+            { latitude: target.latitude, longitude: target.longitude },
+            { latitude: booking.driver!.lat!, longitude: booking.driver!.lng! }
+          );
+          setDistance(d);
+        } catch (err) {
+          console.warn('[ActiveRideScreen] Geolib calculation failed:', err);
+        }
+      });
+      return;
+    }
+
+    // Fallback: Giả lập giảm khoảng cách nếu chưa có tọa độ live của tài xế
     const simInterval = setInterval(() => {
       setDistance((prev) => {
         if (prev <= 0) {
@@ -74,7 +92,7 @@ export default function ActiveRideScreen({ route, navigation }: Props): React.JS
     return () => {
       clearInterval(simInterval);
     };
-  }, [booking?.status]);
+  }, [booking?.status, booking?.driver?.lat, booking?.driver?.lng, booking?.pickupLocation, booking?.dropoffLocation]);
 
   // TTS thông báo khi tài xế tiến lại gần
   useEffect(() => {
@@ -310,11 +328,25 @@ export default function ActiveRideScreen({ route, navigation }: Props): React.JS
         Hành Trình Hiện Tại
       </Text>
 
-      {booking && normalizeBookingStatus(booking.status) === 'ACCEPTED' && (
-        <View style={styles.distanceContainer} accessible={true} accessibilityLabel={`Tài xế đang cách bạn ${distance} mét. Hướng phía trước bên phải.`}>
-          <Text style={styles.distanceLabel}>Khoảng cách tài xế:</Text>
+      {booking && (normalizeBookingStatus(booking.status) === 'ACCEPTED' || normalizeBookingStatus(booking.status) === 'IN_PROGRESS') && (
+        <View 
+          style={styles.distanceContainer} 
+          accessible={true} 
+          accessibilityLabel={
+            normalizeBookingStatus(booking.status) === 'IN_PROGRESS'
+              ? `Khoảng cách đến điểm trả còn ${distance} mét.`
+              : `Tài xế đang cách bạn ${distance} mét. Hướng phía trước bên phải.`
+          }
+        >
+          <Text style={styles.distanceLabel}>
+            {normalizeBookingStatus(booking.status) === 'IN_PROGRESS'
+              ? 'Khoảng cách đến điểm trả:'
+              : 'Khoảng cách tài xế:'}
+          </Text>
           <Text style={styles.distanceValue}>{distance}m</Text>
-          <Text style={styles.directionText}>Hướng: Phía trước bên phải</Text>
+          {normalizeBookingStatus(booking.status) === 'ACCEPTED' && (
+            <Text style={styles.directionText}>Hướng: Phía trước bên phải</Text>
+          )}
         </View>
       )}
 

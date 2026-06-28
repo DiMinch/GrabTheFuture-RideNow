@@ -12,14 +12,41 @@ interface Props {
   isVisible: boolean;
   onAccept: () => void;
   onReject: () => void;
+  booking?: any;
 }
 
-const RideRequestSheet: React.FC<Props> = ({ isVisible, onAccept, onReject }) => {
+const RideRequestSheet: React.FC<Props> = ({ isVisible, onAccept, onReject, booking }) => {
   const { t, lang } = useLang();
   const slideAnim = useRef(new Animated.Value(600)).current;
   const [countdown, setCountdown] = useState(15);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const acceptedRef = useRef(false);
+
+  const [distanceKm, setDistanceKm] = useState('3.2 km');
+  const [fareText, setFareText] = useState('₫42K');
+
+  useEffect(() => {
+    if (booking?.pickupLocation && booking?.dropoffLocation) {
+      import('geolib').then(({ getDistance }) => {
+        try {
+          const dist = getDistance(
+            { latitude: booking.pickupLocation.latitude, longitude: booking.pickupLocation.longitude },
+            { latitude: booking.dropoffLocation.latitude, longitude: booking.dropoffLocation.longitude }
+          );
+          const km = (dist / 1000).toFixed(1);
+          setDistanceKm(`${km} km`);
+          // Calculate dynamic fare: base 15k + 12k/km
+          const fareVal = Math.floor((dist / 1000) * 12 + 15);
+          setFareText(`₫${fareVal}K`);
+        } catch (err) {
+          console.warn('[RideRequestSheet] Error calculating distance/fare:', err);
+        }
+      });
+    } else {
+      setDistanceKm('3.2 km');
+      setFareText('₫42K');
+    }
+  }, [booking]);
 
   useEffect(() => {
     if (isVisible) {
@@ -122,16 +149,16 @@ const RideRequestSheet: React.FC<Props> = ({ isVisible, onAccept, onReject }) =>
           <View style={styles.routeTextCol}>
             <View style={styles.routeBlock}>
               <Text style={styles.routeBlockLabel}>{t('pickup')}</Text>
-              <Text style={styles.routeBlockText}>235 Nguyễn Văn Cừ, Phường 4, Q.5</Text>
+              <Text style={styles.routeBlockText}>{booking?.pickupAddress || 'Vị trí hiện tại'}</Text>
             </View>
             <View style={styles.routeBlock}>
               <Text style={styles.routeBlockLabel}>{t('dropoff')}</Text>
-              <Text style={styles.routeBlockText}>Bệnh viện Chợ Rẫy, Q.5</Text>
+              <Text style={styles.routeBlockText}>{booking?.dropoffAddress || 'Điểm đến'}</Text>
             </View>
           </View>
           <View style={styles.fareBadge}>
-            <Text style={styles.fareAmount}>₫42K</Text>
-            <Text style={styles.fareDistance}>3.2 km</Text>
+            <Text style={styles.fareAmount}>{fareText}</Text>
+            <Text style={styles.fareDistance}>{distanceKm}</Text>
           </View>
         </View>
 

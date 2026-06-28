@@ -3,7 +3,7 @@ import * as Location from 'expo-location';
 import { API_BASE_URL } from '../config';
 import { updateDriverLocation } from '../services/drivers';
 
-export const PASSENGER_COORD = { latitude: 10.7600, longitude: 106.6600 };
+// Không dùng tọa độ cứng cho hành khách nữa - luôn lấy từ currentRide.pickupLocation
 
 interface DriverContextProps {
   isOnline: boolean;
@@ -83,13 +83,19 @@ export const DriverProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       
       try {
         locationSubscription = await Location.watchPositionAsync(
-          { accuracy: Location.Accuracy.Balanced, timeInterval: 3000, distanceInterval: 2 },
+          { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 2000, distanceInterval: 1 },
           (loc) => {
             const coord = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
             setDriverLocation(coord);
             
             import('geolib').then(({ getDistance }) => {
-               const dist = getDistance(coord, PASSENGER_COORD);
+               if (!currentRide) return; // Không có chuyến thì không tính
+               const statusStr = (currentRide.status || '').toUpperCase();
+               const isTrip = statusStr === 'IN_PROGRESS';
+               const target = isTrip ? currentRide.dropoffLocation : currentRide.pickupLocation;
+               if (!target) return;
+               
+               const dist = getDistance(coord, { latitude: target.latitude, longitude: target.longitude });
                setDistance(dist);
             });
             
@@ -112,9 +118,9 @@ export const DriverProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return () => {
       if (locationSubscription) locationSubscription.remove();
     };
-  }, [isOnline, activeDriver?.id]);
+  }, [isOnline, activeDriver?.id, currentRide?.id, currentRide?.status]);
 
-  // 3. Poll for assigned rides (replacing WebSockets since backend is serverless)
+  // 4. Poll for assigned rides (replacing WebSockets since backend is serverless)
   useEffect(() => {
     if (!isOnline || !activeDriver?.id) return;
 
@@ -128,7 +134,7 @@ export const DriverProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           const activeRide = result.data.find(
             (booking: any) =>
               booking.driverId === activeDriver.id &&
-              ['pending', 'accepted', 'in_progress', 'arrived'].includes(booking.status)
+              ['pending', 'accepted', 'in_progress', 'arrived'].includes((booking.status || '').toLowerCase())
           );
 
           if (activeRide) {
