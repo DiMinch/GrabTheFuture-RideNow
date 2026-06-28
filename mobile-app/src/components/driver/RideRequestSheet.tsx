@@ -18,7 +18,7 @@ const RideRequestSheet: React.FC<Props> = ({ isVisible, onAccept, onReject }) =>
   const { t, lang } = useLang();
   const slideAnim = useRef(new Animated.Value(400)).current;
   const [countdown, setCountdown] = useState(15);
-  const countdownRef = useRef<NodeJS.Timeout | null>(null);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const acceptedRef = useRef(false);
 
   useEffect(() => {
