@@ -1,9 +1,9 @@
 import axios from 'axios';
 
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+import { API_BASE_URL } from '../config';
 
 const api = axios.create({
-  baseURL: BACKEND_URL,
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },

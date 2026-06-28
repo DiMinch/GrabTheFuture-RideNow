@@ -1,10 +1,12 @@
+import { AI_GATEWAY_WS_URL } from '../config';
+
 class SocketService {
   private ws: WebSocket | null = null;
   private url: string;
   private listeners: Map<string, Function[]> = new Map();
 
   constructor() {
-    this.url = process.env.EXPO_PUBLIC_AI_GATEWAY_WS_URL || 'ws://localhost:8000/api/ai/stream';
+    this.url = AI_GATEWAY_WS_URL;
   }
 
   connect() {
