@@ -48,7 +48,7 @@ export default function BleHandshakeOverlay({
 
   useEffect(() => {
     // Read driver identity immediately so users can verify they are boarding the right car.
-    void speakAsync(`Tai xe ${driverName}. Bien so ${formattedPlate}. Nhan nhanh hai lan de gui tin hieu.`);
+    void speakAsync(`Tài xế ${driverName}. Biển số ${formattedPlate}. Nhấn nhanh hai lần để gửi tín hiệu.`);
 
     return () => {
       Speech.stop();
@@ -56,8 +56,8 @@ export default function BleHandshakeOverlay({
   }, [driverName, formattedPlate]);
 
   const accessibilityLabel = isConfirmed
-    ? `Da xac nhan voi tai xe ${driverName}, bien so ${licensePlate}.`
-    : `Tai xe ${driverName}, bien so ${licensePlate}. Nhan nhanh hai lan de gui tin hieu BLE.`;
+    ? `Đã xác nhận với tài xế ${driverName}, biển số ${licensePlate}.`
+    : `Tài xế ${driverName}, biển số ${licensePlate}. Nhấn nhanh hai lần để gửi tín hiệu BLE.`;
 
   const handlePress = (): void => {
     if (isSubmitting || isConfirmed) {
@@ -77,7 +77,7 @@ export default function BleHandshakeOverlay({
           await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
           await Promise.resolve(onSignalTapped());
           setIsConfirmed(true);
-          void speakAsync('Da gui tin hieu den tai xe.');
+          void speakAsync('Đã gửi tín hiệu đến tài xế.');
         } finally {
           setIsSubmitting(false);
         }
@@ -97,17 +97,17 @@ export default function BleHandshakeOverlay({
       accessible
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      accessibilityHint="Nhan nhanh hai lan trong vong 400 mili giay de gui tin hieu cho tai xe."
+      accessibilityHint="Nhấn nhanh hai lần trong vòng bốn trăm mili giây để gửi tín hiệu cho tài xế."
       accessibilityState={{ busy: isSubmitting, disabled: isConfirmed }}
     >
       <View style={styles.content}>
         <Text style={styles.title}>BLE Handshake</Text>
-        <Text style={styles.driverText}>Tai xe: {driverName}</Text>
-        <Text style={styles.plateText}>Bien so: {licensePlate}</Text>
+        <Text style={styles.driverText}>Tài xế: {driverName}</Text>
+        <Text style={styles.plateText}>Biển số: {licensePlate}</Text>
         <Text style={styles.instructionText}>
           {isConfirmed
-            ? 'Da xac nhan. Vui long cho chuyen di bat dau.'
-            : 'Nhan nhanh hai lan o bat ky vi tri nao tren man hinh de gui tin hieu.'}
+            ? 'Đã xác nhận. Vui lòng chờ chuyến đi bắt đầu.'
+            : 'Nhấn nhanh hai lần ở bất kỳ vị trí nào trên màn hình để gửi tín hiệu.'}
         </Text>
       </View>
     </Pressable>
