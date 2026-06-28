@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -53,6 +53,13 @@ export default function ActiveRideScreen({ route, navigation }: Props): React.JS
   const [distance, setDistance] = useState<number>(120);
   const [showBleOverlay, setShowBleOverlay] = useState<boolean>(false);
   const [isScreenFlashing, setIsScreenFlashing] = useState<boolean>(false);
+
+  const spokenThresholdsRef = useRef<{ [key: number]: boolean }>({});
+
+  // Reset spoken thresholds when booking status changes
+  useEffect(() => {
+    spokenThresholdsRef.current = {};
+  }, [booking?.status]);
 
   // Gọi API ngay khi màn hình vừa render xong và thiết lập Polling
   useEffect(() => {
@@ -112,24 +119,31 @@ export default function ActiveRideScreen({ route, navigation }: Props): React.JS
     };
   }, [booking?.status, booking?.driver?.lat, booking?.driver?.lng, booking?.pickupLocation, booking?.dropoffLocation]);
 
-  // TTS thông báo khi tài xế tiến lại gần
+  // TTS thông báo khi tài xế tiến lại gần (sử dụng khoảng cách động với ngưỡng range)
   useEffect(() => {
     if (!booking || normalizeBookingStatus(booking.status) !== 'ACCEPTED') return;
 
     let speechText = '';
     
-    if (distance === 120) {
-      speechText = 'Tài xế đang cách bạn một trăm hai mươi mét. Điểm đón của bạn ở phía trước bên phải.';
-    } else if (distance === 100) {
-      speechText = 'Tài xế đang ở phía trước bên phải, cách bạn một trăm mét.';
-    } else if (distance === 80) {
-      speechText = 'Tài xế cách bạn tám mươi mét, tiếp tục di chuyển về phía điểm đón.';
-    } else if (distance === 50) {
-      speechText = 'Tài xế đang cách bạn năm mươi mét.';
-    } else if (distance === 20) {
-      speechText = `Tài xế cách bạn hai mươi mét. Kích hoạt radar rung và nháy màn hình màu ${beaconColor.name} để tài xế nhận diện.`;
-    } else if (distance === 5) {
-      speechText = 'Tài xế đã đến gần dưới năm mét. Bắt đầu xác thực BLE Handshake.';
+    if (distance <= 120 && distance > 100 && !spokenThresholdsRef.current[120]) {
+      speechText = 'Tài xế đang cách bạn khoảng một trăm hai mươi mét. Điểm đón của bạn ở phía trước bên phải.';
+      spokenThresholdsRef.current[120] = true;
+    } else if (distance <= 100 && distance > 80 && !spokenThresholdsRef.current[100]) {
+      speechText = 'Tài xế đang cách bạn khoảng một trăm mét.';
+      spokenThresholdsRef.current[100] = true;
+    } else if (distance <= 80 && distance > 50 && !spokenThresholdsRef.current[80]) {
+      speechText = 'Tài xế cách bạn khoảng tám mươi mét.';
+      spokenThresholdsRef.current[80] = true;
+    } else if (distance <= 50 && distance > 20 && !spokenThresholdsRef.current[50]) {
+      speechText = 'Tài xế đang cách bạn khoảng năm mươi mét.';
+      spokenThresholdsRef.current[50] = true;
+    } else if (distance <= 20 && distance > 10 && !spokenThresholdsRef.current[20]) {
+      speechText = `Tài xế cách bạn khoảng hai mươi mét. Kích hoạt radar rung và nháy màn hình màu ${beaconColor.name} để tài xế nhận diện.`;
+      spokenThresholdsRef.current[20] = true;
+      setIsScreenFlashing(true);
+    } else if (distance <= 10 && distance > 0 && !spokenThresholdsRef.current[10]) {
+      speechText = 'Tài xế đã đến rất gần dưới mười mét. Bắt đầu xác thực BLE Handshake. Hãy chạm đúp hai lần trên màn hình để gửi tín hiệu.';
+      spokenThresholdsRef.current[10] = true;
       setShowBleOverlay(true);
     }
 
@@ -369,25 +383,7 @@ export default function ActiveRideScreen({ route, navigation }: Props): React.JS
 
       {booking && <BookingDetailsCard booking={booking} />}
 
-      {booking ? (
-        <TouchableOpacity
-          style={[styles.statusButton, (statusUpdating || getNextBookingStatus(booking.status) === null) && styles.statusButtonDisabled]}
-          onPress={updateNextBookingStatus}
-          disabled={statusUpdating || getNextBookingStatus(booking.status) === null}
-          accessible
-          accessibilityRole="button"
-          accessibilityLabel="Cập nhật trạng thái chuyến đi"
-          accessibilityHint="Chạm hai lần để gửi yêu cầu PATCH cập nhật trạng thái chuyến đi theo API."
-        >
-          <Text style={styles.buttonText}>
-            {statusUpdating
-              ? 'Đang cập nhật...'
-              : getNextBookingStatus(booking.status)
-                ? `Cập nhật sang ${getBookingStatusText(getNextBookingStatus(booking.status) as string)}`
-                : 'Trạng thái đã hoàn tất'}
-          </Text>
-        </TouchableOpacity>
-      ) : null}
+
 
       {/* Flash Beacon simulation overlay */}
       {isScreenFlashing && (

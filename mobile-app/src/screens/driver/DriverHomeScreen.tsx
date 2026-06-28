@@ -93,7 +93,7 @@ const DriverHomeScreen: React.FC<DriverHomeScreenProps> = ({ onAcceptRide, onRej
       <LangToggleButton style={styles.langBtn} />
 
       <RideRequestSheet 
-        isVisible={!!currentRide} 
+        isVisible={!!currentRide && (currentRide.status || '').toUpperCase() === 'PENDING'} 
         booking={currentRide}
         onAccept={async () => {
           if (currentRide?.id && activeDriver?.id) {
