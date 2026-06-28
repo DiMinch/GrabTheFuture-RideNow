@@ -49,37 +49,38 @@ RideNow solves this by establishing a synchronized system of three core technica
 
 ```mermaid
 graph TD
-    subgraph Passenger App (React Native)
-        UI[Audio-First Screen & Sensors]
-        BLE[BLE Scanner]
-        AudioRTC[WebRTC Client]
+
+    subgraph "Passenger App (React Native)"
+        UI["Audio-First Screen & Sensors"]
+        BLE["BLE Scanner"]
+        AudioRTC["WebRTC Client"]
     end
 
-    subgraph Driver App (React Native)
-        DUI[Driver UI / Speaker]
-        Beacon[BLE Beacon Broadcast]
+    subgraph "Driver App (React Native)"
+        DUI["Driver UI / Speaker"]
+        Beacon["BLE Beacon Broadcast"]
     end
 
-    subgraph Backend Server (Node.js & Firebase)
-        WS[WebSocket Hub]
-        Firebase[Firebase Database & Matching]
+    subgraph "Backend Server (Node.js & Firebase)"
+        WS["WebSocket Hub"]
+        Firebase["Firebase Database & Matching"]
     end
 
-    subgraph AI Gateway (FastAPI)
-        RTCGW[WebRTC Signalling]
-        Gemini[Gemini Multimodal Live API]
+    subgraph "AI Gateway (FastAPI)"
+        RTCGW["WebRTC Signalling"]
+        Gemini["Gemini Multimodal Live API"]
     end
 
     UI -->|Raise to Ear / Voice| AudioRTC
     AudioRTC <-->|WebRTC Stream| RTCGW
-    RTCGW <-->|Bidirectional WS| Gemini
-    
-    BLE <-->|RSSI Scanner <5m| Beacon
+    RTCGW <-->|Bidirectional WebSocket| Gemini
+
+    BLE <-->|RSSI Scanner under 5m| Beacon
     UI -->|Tap-to-Signal| WS
     WS -->|Realtime Alert| DUI
-    
+
     DUI -->|GPS Updates| WS
-    WS -->|Distance & Azimuth calculation| UI
+    WS -->|Distance & Azimuth Calculation| UI
 ```
 
 ### Data Flow Summaries:
