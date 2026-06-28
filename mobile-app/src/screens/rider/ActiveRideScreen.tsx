@@ -78,7 +78,7 @@ export default function ActiveRideScreen({ route, navigation }: Props): React.JS
   // Vòng lặp giả lập hành trình & tính khoảng cách động (Simulation Loop & Dynamic Distance)
   useEffect(() => {
     const status = normalizeBookingStatus(booking?.status || '');
-    if (!booking || (status !== 'ACCEPTED' && status !== 'IN_PROGRESS')) {
+    if (!booking || (status !== 'ACCEPTED' && status !== 'ARRIVED' && status !== 'IN_PROGRESS')) {
       setDistance(120);
       setShowBleOverlay(false);
       setIsScreenFlashing(false);
@@ -121,30 +121,43 @@ export default function ActiveRideScreen({ route, navigation }: Props): React.JS
 
   // TTS thông báo khi tài xế tiến lại gần (sử dụng khoảng cách động với ngưỡng range)
   useEffect(() => {
-    if (!booking || normalizeBookingStatus(booking.status) !== 'ACCEPTED') return;
+    if (!booking) return;
+    const status = normalizeBookingStatus(booking.status);
+    if (status !== 'ACCEPTED' && status !== 'ARRIVED') return;
 
     let speechText = '';
     
-    if (distance <= 120 && distance > 100 && !spokenThresholdsRef.current[120]) {
-      speechText = 'Tài xế đang cách bạn khoảng một trăm hai mươi mét. Điểm đón của bạn ở phía trước bên phải.';
-      spokenThresholdsRef.current[120] = true;
-    } else if (distance <= 100 && distance > 80 && !spokenThresholdsRef.current[100]) {
-      speechText = 'Tài xế đang cách bạn khoảng một trăm mét.';
-      spokenThresholdsRef.current[100] = true;
-    } else if (distance <= 80 && distance > 50 && !spokenThresholdsRef.current[80]) {
-      speechText = 'Tài xế cách bạn khoảng tám mươi mét.';
-      spokenThresholdsRef.current[80] = true;
-    } else if (distance <= 50 && distance > 20 && !spokenThresholdsRef.current[50]) {
-      speechText = 'Tài xế đang cách bạn khoảng năm mươi mét.';
-      spokenThresholdsRef.current[50] = true;
-    } else if (distance <= 20 && distance > 10 && !spokenThresholdsRef.current[20]) {
-      speechText = `Tài xế cách bạn khoảng hai mươi mét. Kích hoạt radar rung và nháy màn hình màu ${beaconColor.name} để tài xế nhận diện.`;
-      spokenThresholdsRef.current[20] = true;
-      setIsScreenFlashing(true);
-    } else if (distance <= 10 && distance > 0 && !spokenThresholdsRef.current[10]) {
-      speechText = 'Tài xế đã đến rất gần dưới mười mét. Bắt đầu xác thực BLE Handshake. Hãy chạm đúp hai lần trên màn hình để gửi tín hiệu.';
-      spokenThresholdsRef.current[10] = true;
-      setShowBleOverlay(true);
+    if (status === 'ARRIVED') {
+      if (!spokenThresholdsRef.current[0]) {
+        speechText = 'Tài xế đã đến điểm đón. Bắt đầu xác thực BLE Handshake. Hãy chạm đúp hai lần trên màn hình để gửi tín hiệu.';
+        spokenThresholdsRef.current[0] = true;
+        setDistance(0);
+        setShowBleOverlay(true);
+        setIsScreenFlashing(true);
+      }
+    } else {
+      // status === 'ACCEPTED'
+      if (distance <= 120 && distance > 100 && !spokenThresholdsRef.current[120]) {
+        speechText = 'Tài xế đang cách bạn khoảng một trăm hai mươi mét. Điểm đón của bạn ở phía trước bên phải.';
+        spokenThresholdsRef.current[120] = true;
+      } else if (distance <= 100 && distance > 80 && !spokenThresholdsRef.current[100]) {
+        speechText = 'Tài xế đang cách bạn khoảng một trăm mét.';
+        spokenThresholdsRef.current[100] = true;
+      } else if (distance <= 80 && distance > 50 && !spokenThresholdsRef.current[80]) {
+        speechText = 'Tài xế cách bạn khoảng tám mươi mét.';
+        spokenThresholdsRef.current[80] = true;
+      } else if (distance <= 50 && distance > 20 && !spokenThresholdsRef.current[50]) {
+        speechText = 'Tài xế đang cách bạn khoảng năm mươi mét.';
+        spokenThresholdsRef.current[50] = true;
+      } else if (distance <= 20 && distance > 10 && !spokenThresholdsRef.current[20]) {
+        speechText = `Tài xế cách bạn khoảng hai mươi mét. Kích hoạt radar rung và nháy màn hình màu ${beaconColor.name} để tài xế nhận diện.`;
+        spokenThresholdsRef.current[20] = true;
+        setIsScreenFlashing(true);
+      } else if (distance <= 10 && distance > 0 && !spokenThresholdsRef.current[10]) {
+        speechText = 'Tài xế đã đến rất gần dưới mười mét. Bắt đầu xác thực BLE Handshake. Hãy chạm đúp hai lần trên màn hình để gửi tín hiệu.';
+        spokenThresholdsRef.current[10] = true;
+        setShowBleOverlay(true);
+      }
     }
 
     if (speechText) {
@@ -154,7 +167,9 @@ export default function ActiveRideScreen({ route, navigation }: Props): React.JS
 
   // Haptic Radar + Flash Beacon (20m -> 5m)
   useEffect(() => {
-    if (!booking || normalizeBookingStatus(booking.status) !== 'ACCEPTED') {
+    if (!booking) return;
+    const status = normalizeBookingStatus(booking.status);
+    if (status !== 'ACCEPTED' && status !== 'ARRIVED') {
       setIsScreenFlashing(false);
       return;
     }
@@ -162,14 +177,14 @@ export default function ActiveRideScreen({ route, navigation }: Props): React.JS
     let flashTimer: ReturnType<typeof setInterval> | null = null;
     let vibrateTimer: ReturnType<typeof setInterval> | null = null;
 
-    if (distance <= 20 && distance > 5) {
+    if (status === 'ARRIVED' || (distance <= 20 && distance > 5)) {
       // Flash screen periodically
       flashTimer = setInterval(() => {
         setIsScreenFlashing((prev) => !prev);
       }, 300);
 
-      // Vibration interval gets faster as driver gets closer
-      const vibrateInterval = Math.max(400, distance * 80);
+      // Vibration interval gets faster as driver gets closer (or immediately maximum rate if ARRIVED)
+      const vibrateInterval = status === 'ARRIVED' ? 400 : Math.max(400, distance * 80);
       
       const triggerVibration = () => {
         Vibration.vibrate(200);
@@ -359,7 +374,7 @@ export default function ActiveRideScreen({ route, navigation }: Props): React.JS
       <Text style={styles.title} accessible accessibilityRole="header">
         Hành Trình Hiện Tại
       </Text>
-      {booking && (normalizeBookingStatus(booking.status) === 'ACCEPTED' || normalizeBookingStatus(booking.status) === 'IN_PROGRESS') && (
+      {booking && (normalizeBookingStatus(booking.status) === 'ACCEPTED' || normalizeBookingStatus(booking.status) === 'ARRIVED' || normalizeBookingStatus(booking.status) === 'IN_PROGRESS') && (
         <View 
           style={styles.distanceContainer} 
           accessible={true} 

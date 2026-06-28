@@ -30,13 +30,13 @@ router.post('/drivers/location', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'driverId and location are required' });
     }
 
-    // 1. Cập nhật vị trí tài xế trong Firestore (bảng drivers)
-    await getDb().collection('drivers').doc(driverId).set({
+    // 1. Cập nhật vị trí tài xế trong Firestore (bảng drivers) - chỉ cập nhật nếu tài xế đã tồn tại
+    await getDb().collection('drivers').doc(driverId).update({
       latitude: location.latitude,
       longitude: location.longitude,
       bearing: bearing || 0,
       updatedAt: new Date()
-    }, { merge: true });
+    });
 
     // 2. Tìm tất cả cuốc xe đang chạy của tài xế này để cập nhật tọa độ GPS realtime vào Booking doc
     const activeBookingsSnapshot = await getDb().collection('bookings')

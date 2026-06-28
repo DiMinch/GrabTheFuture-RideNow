@@ -141,7 +141,10 @@ router.post('/seed', async (req: Request, res: Response) => {
             }
         ];
 
-        const addPromises = mockDrivers.map(d => db.collection('drivers').add(d));
+        const addPromises = mockDrivers.map((d, index) => {
+            const id = `driver-mock-${index + 1}`;
+            return db.collection('drivers').doc(id).set(d);
+        });
         await Promise.all(addPromises);
 
         res.status(200).json({ success: true, message: 'Database re-seeded successfully' });
