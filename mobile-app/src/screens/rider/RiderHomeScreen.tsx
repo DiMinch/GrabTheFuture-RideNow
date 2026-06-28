@@ -135,6 +135,16 @@ export default function RiderHomeScreen({ navigation }: RiderHomeScreenProps): R
         return;
       }
 
+      // Dọn dẹp ghi âm cũ nếu còn tồn tại để tránh lỗi trùng lặp đối tượng ghi âm
+      if (recordingRef.current) {
+        try {
+          await recordingRef.current.stopAndUnloadAsync();
+        } catch (e) {
+          // Bỏ qua lỗi nếu đối tượng chưa chuẩn bị xong
+        }
+        recordingRef.current = null;
+      }
+
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
@@ -195,6 +205,9 @@ export default function RiderHomeScreen({ navigation }: RiderHomeScreenProps): R
         clearTimeout(tapTimeoutRef.current);
       }
       Speech.stop();
+      if (recordingRef.current) {
+        void recordingRef.current.stopAndUnloadAsync().catch(() => {});
+      }
     };
   }, []);
 
