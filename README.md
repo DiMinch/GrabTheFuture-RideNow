@@ -46,6 +46,10 @@ RideNow solves this by establishing a synchronized system of three core technica
 1. **AI Flow:** `Mobile App (Audio Stream)` <-> `AI Gateway (FastAPI)` <-> `Gemini Live API`. The AI Gateway acts as a secure middleware to inject context (GPS, language) and execute tools (Geocoding, Booking API).
 2. **Real-time Sync:** `Mobile App` <-> `Backend Server (Socket.IO)`. Driver's GPS updates are pushed to the rider for azimuth/distance calculations and haptic radar triggering.
 
+<p align="center">
+  <img src="docs/assets/architecture.png" alt="System Architecture Diagram" width="800">
+</p>
+
 ---
 
 ## 4. 🛠️ Prerequisites & Installation Steps
@@ -109,6 +113,12 @@ npx expo start --clear
 ---
 
 ## 6. 📱 User Guide (How to use the product)
+
+<p align="center">
+  <img src="docs/assets/rider_home.png" alt="Rider Home Screen" width="250">
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="docs/assets/driver_home.png" alt="Driver Home Screen" width="250">
+</p>
 
 ### Phase 1: Booking a Ride (Passenger)
 1. Open the RideNow app and select the **Hành khách (Rider)** mode.
