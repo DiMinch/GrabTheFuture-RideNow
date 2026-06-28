@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "1c72bc51-904d-4ca9-9d42-b864703d9b90"
+      }
+    },
+    "android": {
+      "package": "com.diminch.ridenowmobile"
+    }
+  }
+}
