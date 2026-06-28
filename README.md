@@ -6,7 +6,7 @@ RideNow is an accessibility-focused smart mobility layer designed to bridge the 
 
 ## 🌐 Live Demo & Deployed Environments
 The backend services are currently deployed and live on **Google Cloud Run (asia-southeast1)**:
-- **REST Backend Server:** `https://ridenow-backend-386163946866.asia-southeast1.run.app`
+- **REST Backend Server:** `https://ridenow-backend-386163946866.asia-southeast1.run.app` (Dashboard included in /dashboard)
 - **AI Gateway (WebSocket):** `wss://ai-gateway-386163946866.asia-southeast1.run.app`
 
 ---
