@@ -4,6 +4,13 @@ RideNow is an accessibility-focused smart mobility layer designed to bridge the 
 
 ---
 
+## 🌐 Live Demo & Deployed Environments
+The backend services are currently deployed and live on **Google Cloud Run (asia-southeast1)**:
+- **REST Backend Server:** `https://ridenow-backend-386163946866.asia-southeast1.run.app`
+- **AI Gateway (WebSocket):** `wss://ai-gateway-386163946866.asia-southeast1.run.app`
+
+---
+
 ## 1. 🚨 Problem Statement
 **How might we bridge this last-meter gap between ride-hailing drivers and visually impaired people, at any pickup point?**
 
@@ -46,45 +53,8 @@ RideNow solves this by establishing a synchronized system of three core technica
 1. **AI Flow:** `Mobile App (Audio Stream)` <-> `AI Gateway (FastAPI)` <-> `Gemini Live API`. The AI Gateway acts as a secure middleware to inject context (GPS, language) and execute tools (Geocoding, Booking API).
 2. **Real-time Sync:** `Mobile App` <-> `Backend Server (Socket.IO)`. Driver's GPS updates are pushed to the rider for azimuth/distance calculations and haptic radar triggering.
 
-### System Architecture Diagram
-```mermaid
-graph TD
-    subgraph "Passenger App (React Native)"
-        UI["Audio-First UI & Sensors"]
-        BLE["BLE Scanner (Mock)"]
-        AudioWS["WebSocket Audio Client"]
-    end
-
-    subgraph "Driver App (React Native)"
-        DUI["Driver UI / Speaker"]
-        Beacon["BLE Beacon Broadcast (Mock)"]
-    end
-
-    subgraph "Backend Server (Node.js)"
-        WS["Socket.IO Hub"]
-        BookingAPI["REST Booking API"]
-    end
-
-    subgraph "AI Gateway (FastAPI)"
-        WSGW["WebSocket Streaming Route"]
-        Gemini["Gemini Live Multimodal API"]
-        Nominatim["OSM Nominatim Geocoder"]
-    end
-
-    UI -->|Tap to Talk| AudioWS
-    AudioWS <-->|Base64 Audio via WS| WSGW
-    WSGW <-->|Bidirectional WS| Gemini
-    Gemini -->|Tool Call| Nominatim
-    Gemini -->|Tool Call| BookingAPI
-
-    BLE <-->|RSSI Scanner under 5m| Beacon
-    UI -->|GPS & State Updates| WS
-    DUI -->|GPS Updates| WS
-    WS -->|Distance & Azimuth Calculation| UI
-    WS -->|Realtime Alerts| DUI
-```
 <p align="center">
-  <img src="docs/assets/architecture.png" alt="System Architecture Diagram" width="800">
+  <img src="docs/assets/system-architecture.png" alt="System Architecture Diagram" width="800">
 </p>
 
 ---
@@ -152,9 +122,14 @@ npx expo start --clear
 ## 6. 📱 User Guide (How to use the product)
 
 <p align="center">
-  <img src="docs/assets/rider_home.png" alt="Rider Home Screen" width="250">
+  <img src="docs/assets/homescreen.jpg" alt="Home Screen" width="250">
   &nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="docs/assets/driver_home.png" alt="Driver Home Screen" width="250">
+  <img src="docs/assets/rider_1.jpg" alt="Rider Mic" width="250">
+  <img src="docs/assets/rider_2.jpg" alt="Address Detection" width="250">
+</p>
+<p align="center">
+  <img src="docs/assets/driver_1.jpg" alt="Order Completed" width="250">
+  <img src="docs/assets/driver_2.jpg" alt="Rider Map" width="250">
 </p>
 
 ### Phase 1: Booking a Ride (Passenger)
