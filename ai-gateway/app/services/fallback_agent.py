@@ -17,8 +17,10 @@ class FallbackAgentService:
     def __init__(self, api_key: str, context: dict = None):
         self.api_key = api_key
         self.context = context or {}
-        # Dùng model cấu hình động từ settings để tránh lỗi không tìm thấy model
+        # Nếu mô hình được cấu hình dành riêng cho Live/Preview, tự động chuyển về gemini-2.5-flash cho REST API
         model_name = settings.GEMINI_MODEL
+        if "live" in model_name or "preview" in model_name:
+            model_name = "gemini-2.5-flash"
         self.model_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
         
         # Audio accumulator for raw PCM bytes (from Mobile client)
