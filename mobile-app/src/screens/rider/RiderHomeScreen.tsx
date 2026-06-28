@@ -8,7 +8,7 @@ import {
 import * as Haptics from 'expo-haptics';
 import * as Speech from 'expo-speech';
 import { Audio } from 'expo-av';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { AiStreamClient, type AiStreamIncomingMessage } from '../../services/aiStream';
 import { API_BASE_URL, AI_GATEWAY_WS_URL } from '../../config';
 
